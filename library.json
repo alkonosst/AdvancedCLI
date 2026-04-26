@@ -1,0 +1,17 @@
+{
+  "name": "AdvancedCLI",
+  "version": "0.1.0",
+  "authors": {
+    "name": "Maximiliano Ramirez",
+    "email": "maximiliano.ramirezbravo@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alkonosst/AdvancedCLI.git"
+  },
+  "description": "Zero-heap CLI engine for Arduino. Supports named args, flags, integers, floats, positional values, sub-commands, and aliases. Typed callbacks, built-in help output, validation hooks, and error handling - all backed by fixed-size buffers.",
+  "keywords": "CLI, command, command line, serial, terminal, UART, argument, parser, commands, flags, sub-commands, aliases, help, validation, AVR, ESP32, Arduino, lightweight, embedded",
+  "license": "MIT",
+  "frameworks": "arduino",
+  "headers": ["AdvancedCLI.h"]
+}

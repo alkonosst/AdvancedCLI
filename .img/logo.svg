@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 160" width="300" height="160">
+  <defs>
+    <style>
+      @keyframes blink  { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+      @keyframes type-1 { 0%, 7%  { opacity: 0; } 8%,  93% { opacity: 1; } 97%, 100% { opacity: 0; } }
+      @keyframes type-2 { 0%, 14% { opacity: 0; } 15%, 93% { opacity: 1; } 97%, 100% { opacity: 0; } }
+      @keyframes type-3 { 0%, 21% { opacity: 0; } 22%, 93% { opacity: 1; } 97%, 100% { opacity: 0; } }
+      @keyframes type-4 { 0%, 28% { opacity: 0; } 29%, 93% { opacity: 1; } 97%, 100% { opacity: 0; } }
+      @keyframes slide-in {
+        0%   { transform: translateX(30px); opacity: 0; }
+        100% { transform: translateX(0);    opacity: 1; }
+      }
+      .cursor  { animation: blink 1.1s step-end infinite; }
+      .cmd-1   { animation: type-1 8s linear infinite; }
+      .cmd-2   { animation: type-2 8s linear infinite; }
+      .cmd-3   { animation: type-3 8s linear infinite; }
+      .cmd-4   { animation: type-4 8s linear infinite; }
+      .panel   { animation: slide-in 0.6s ease-out forwards; }
+    </style>
+  </defs>
+
+  <!-- Panel background -->
+  <rect width="300" height="160" rx="10" fill="#0d1117"/>
+
+  <!-- Title bar -->
+  <rect width="300" height="28" rx="10" fill="#161b22"/>
+  <rect y="18" width="300" height="10" fill="#161b22"/>
+  <circle cx="18" cy="14" r="5" fill="#ff5f57"/>
+  <circle cx="33" cy="14" r="5" fill="#febc2e"/>
+  <circle cx="48" cy="14" r="5" fill="#28c840"/>
+  <text x="150" y="19" text-anchor="middle"
+        font-family="'Courier New', Courier, monospace"
+        font-size="9" fill="#6e7681">Serial Monitor  -  115200 baud</text>
+
+  <!-- Library name -->
+  <text x="16" y="54"
+        font-family="'Courier New', Courier, monospace"
+        font-size="19" font-weight="bold" fill="#38bdf8">Advanced</text>
+  <text x="16" y="74"
+        font-family="'Courier New', Courier, monospace"
+        font-size="19" font-weight="bold" fill="#4ade80">CLI</text>
+  <text x="16" y="84"
+        font-family="'Courier New', Courier, monospace"
+        font-size="7" fill="#484f58" letter-spacing="1.5">for Arduino</text>
+
+  <!-- Separator -->
+  <line x1="16" y1="92" x2="150" y2="92" stroke="#21262d" stroke-width="1"/>
+
+  <!-- CLI prompt lines -->
+  <text x="16" y="107"
+        font-family="'Courier New', Courier, monospace"
+        font-size="11" fill="#4ade80">&gt;</text>
+  <text x="27" y="107"
+        font-family="'Courier New', Courier, monospace"
+        font-size="11" fill="#e6edf3"> servo -angle 90</text>
+  <text x="16" y="120"
+        font-family="'Courier New', Courier, monospace"
+        font-size="10" fill="#484f58">  Servo set to 90 deg</text>
+  <text x="16" y="135"
+        font-family="'Courier New', Courier, monospace"
+        font-size="11" fill="#4ade80">&gt;</text>
+  <rect x="27" y="125" width="7" height="13" fill="#4ade80" class="cursor"/>
+
+  <!-- ===== Help output panel (right side) ===== -->
+
+  <!-- Help panel background -->
+  <rect x="168" y="36" width="118" height="116" rx="5"
+        fill="#0d1117" stroke="#21262d" stroke-width="1"/>
+
+  <!-- Thin top accent stripe -->
+  <rect x="168" y="36" width="118" height="3" rx="2" fill="#38bdf8" opacity="0.4"/>
+
+  <!-- "help" label -->
+  <text x="178" y="51"
+        font-family="'Courier New', Courier, monospace"
+        font-size="8" fill="#484f58">&gt; help</text>
+
+  <!-- Command rows - appear one at a time -->
+  <!-- Row 1 -->
+  <g class="cmd-1">
+    <rect x="175" y="56" width="104" height="14" rx="2" fill="#161b22"/>
+    <text x="180" y="66"
+          font-family="'Courier New', Courier, monospace"
+          font-size="7.5" font-weight="bold" fill="#38bdf8">servo</text>
+    <text x="210" y="66"
+          font-family="'Courier New', Courier, monospace"
+          font-size="7" fill="#6e7681">Set servo angle</text>
+  </g>
+
+  <!-- Row 1 arg -->
+  <g class="cmd-1">
+    <text x="184" y="78"
+          font-family="'Courier New', Courier, monospace"
+          font-size="6.5" fill="#4ade80">-angle</text>
+    <text x="212" y="78"
+          font-family="'Courier New', Courier, monospace"
+          font-size="6" fill="#484f58">[named] *required*</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g class="cmd-2">
+    <rect x="175" y="83" width="104" height="14" rx="2" fill="#161b22"/>
+    <text x="180" y="93"
+          font-family="'Courier New', Courier, monospace"
+          font-size="7.5" font-weight="bold" fill="#38bdf8">wifi</text>
+    <text x="205" y="93"
+          font-family="'Courier New', Courier, monospace"
+          font-size="7" fill="#6e7681">WiFi commands</text>
+  </g>
+
+  <!-- Row 2 sub-command -->
+  <g class="cmd-2">
+    <text x="184" y="105"
+          font-family="'Courier New', Courier, monospace"
+          font-size="6.5" fill="#4ade80">scan</text>
+    <text x="206" y="105"
+          font-family="'Courier New', Courier, monospace"
+          font-size="6" fill="#484f58">Scan networks</text>
+    <text x="184" y="114"
+          font-family="'Courier New', Courier, monospace"
+          font-size="6.5" fill="#4ade80">connect</text>
+    <text x="215" y="114"
+          font-family="'Courier New', Courier, monospace"
+          font-size="6" fill="#484f58">Join network</text>
+  </g>
+
+  <!-- Row 3 -->
+  <g class="cmd-3">
+    <rect x="175" y="119" width="104" height="14" rx="2" fill="#161b22"/>
+    <text x="180" y="129"
+          font-family="'Courier New', Courier, monospace"
+          font-size="7.5" font-weight="bold" fill="#38bdf8">help</text>
+    <text x="205" y="129"
+          font-family="'Courier New', Courier, monospace"
+          font-size="7" fill="#6e7681">Print this help</text>
+  </g>
+
+  <!-- Row 4 blinking prompt at bottom -->
+  <g class="cmd-4">
+    <text x="178" y="144"
+          font-family="'Courier New', Courier, monospace"
+          font-size="8" fill="#4ade80">&gt;</text>
+    <rect x="188" y="136" width="6" height="11" fill="#4ade80" class="cursor"/>
+  </g>
+</svg>
