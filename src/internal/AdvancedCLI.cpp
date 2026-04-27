@@ -265,35 +265,39 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
 
 /* ------------------------------------------- Help ------------------------------------------- */
 
-void AdvancedCLI::printHelp() const {
+void AdvancedCLI::printHelp(uint8_t depth) const {
   _output("Available commands:");
 
   for (uint8_t i = 0; i < _cmd_count; ++i) {
     const Command& cmd = _commands[i];
     if (cmd._parent_idx != -1) continue; // sub-commands printed under their parent
 
-    _printCommandEntry(cmd, 2);
+    _printCommandEntry(cmd, 2, depth >= 3);
 
-    // Print direct sub-commands indented below the parent
-    for (uint8_t j = 0; j < _cmd_count; ++j) {
-      if (_commands[j]._parent_idx == i) {
-        _printCommandEntry(_commands[j], 4);
+    if (depth >= 2) {
+      // Print direct sub-commands indented below the parent
+      for (uint8_t j = 0; j < _cmd_count; ++j) {
+        if (_commands[j]._parent_idx == i) {
+          _printCommandEntry(_commands[j], 4, depth >= 3);
+        }
       }
     }
   }
 }
 
-void AdvancedCLI::printHelp(const char* cmd_name) const {
+void AdvancedCLI::printHelp(const char* cmd_name, uint8_t depth) const {
   if (!cmd_name) return;
   for (uint8_t i = 0; i < _cmd_count; ++i) {
     const Command& cmd = _commands[i];
     if (cmd._parent_idx != -1) continue; // only match top-level names
     if (!strEqual(cmd.getName(), cmd_name, _case_sensitive)) continue;
 
-    _printCommandEntry(cmd, 2);
-    for (uint8_t j = 0; j < _cmd_count; ++j) {
-      if (_commands[j]._parent_idx == i) {
-        _printCommandEntry(_commands[j], 4);
+    _printCommandEntry(cmd, 2, depth >= 3);
+    if (depth >= 2) {
+      for (uint8_t j = 0; j < _cmd_count; ++j) {
+        if (_commands[j]._parent_idx == i) {
+          _printCommandEntry(_commands[j], 4, depth >= 3);
+        }
       }
     }
     return;
@@ -516,13 +520,15 @@ void AdvancedCLI::_fireError(Command& cmd, const char* message, const char* usag
   }
 }
 
-void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent) const {
+void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool print_args) const {
   // Build indent string
   char pad[12] = {};
   for (uint8_t k = 0; k < indent && k < 11; ++k)
     pad[k] = ' ';
 
   _outputf("%s%-16s %s", pad, cmd.getName(), cmd.getDescription()[0] ? cmd.getDescription() : "");
+
+  if (!print_args) return;
 
   // Argument lines (indented 2 more than the command name)
   char arg_pad[14] = {};

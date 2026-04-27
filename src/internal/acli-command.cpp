@@ -131,6 +131,14 @@ const char* Command::getDescription() const { return _description ? _description
 bool Command::isValid() const { return _name != nullptr; }
 uint8_t Command::getArgCount() const { return _arg_count; }
 
+uint8_t Command::getParsedArgCount() const {
+  uint8_t count = 0;
+  for (uint8_t i = 0; i < _arg_count; ++i) {
+    if (_parsed[i].is_set) ++count;
+  }
+  return count;
+}
+
 /* --------------------------------------- Private methods -------------------------------------- */
 
 void Command::_init(const char* name, AdvancedCLI* owner, int8_t self_idx, int8_t parent_idx) {

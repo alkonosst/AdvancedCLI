@@ -894,6 +894,145 @@ static void test_printHelp_single_command_outputs_name() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
+/*                                       getParsedArgCount()                                      */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_getParsedArgCount_zero_when_no_args_provided() {
+  AdvancedCLI cli;
+  ArgStr h_a;
+  ArgStr h_b;
+  uint8_t count = 99;
+
+  auto& cmd = cli.addCommand("cmd");
+  h_a       = cmd.addArg("a", "default_a");
+  h_b       = cmd.addArg("b", "default_b");
+  cmd.onExecute([&](Command& c) { count = c.getParsedArgCount(); });
+
+  // Neither arg is explicitly provided - only defaults exist, so getParsedArgCount() == 0
+  TEST_ASSERT_TRUE(cli.inject("cmd"));
+  TEST_ASSERT_EQUAL(0, count);
+}
+
+static void test_getParsedArgCount_counts_provided_args() {
+  AdvancedCLI cli;
+  ArgStr h_a;
+  ArgStr h_b;
+  ArgFlag h_f;
+  uint8_t count = 0;
+
+  auto& cmd = cli.addCommand("cmd");
+  h_a       = cmd.addArg("a", "default_a");
+  h_b       = cmd.addArg("b", "default_b");
+  h_f       = cmd.addFlag("flag");
+  cmd.onExecute([&](Command& c) { count = c.getParsedArgCount(); });
+
+  TEST_ASSERT_TRUE(cli.inject("cmd --a hello --flag"));
+  TEST_ASSERT_EQUAL(2, count);
+}
+
+static void test_getParsedArgCount_all_when_all_provided() {
+  AdvancedCLI cli;
+  ArgStr h_a;
+  ArgInt h_b;
+  uint8_t count = 0;
+
+  auto& cmd = cli.addCommand("cmd");
+  h_a       = cmd.addArg("a");
+  h_b       = cmd.addIntArg("b");
+  cmd.onExecute([&](Command& c) { count = c.getParsedArgCount(); });
+
+  TEST_ASSERT_TRUE(cli.inject("cmd --a hello --b 42"));
+  TEST_ASSERT_EQUAL(2, count);
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                                     printHelp(depth)                                          */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_printHelp_depth1_hides_subcommands_and_args() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  ArgInt h_angle;
+  Command& servo = cli.addCommand("servo").setDescription("Servo control.");
+  h_angle        = servo.addIntArg("angle").setRequired();
+  servo.onExecute([](Command&) {});
+
+  Command& wifi = cli.addCommand("wifi").setDescription("Wi-Fi management.");
+  wifi.addSubCommand("scan").setDescription("Scan networks.").onExecute([](Command&) {});
+
+  cli.printHelp(1);
+
+  // Command names appear
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "servo"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  // Sub-commands and argument lines must NOT appear
+  TEST_ASSERT_NULL(strstr(cap.buf, "scan"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "angle"));
+}
+
+static void test_printHelp_depth2_shows_subcommands_hides_args() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  ArgInt h_angle;
+  Command& servo = cli.addCommand("servo").setDescription("Servo control.");
+  h_angle        = servo.addIntArg("angle").setRequired();
+  servo.onExecute([](Command&) {});
+
+  Command& wifi = cli.addCommand("wifi").setDescription("Wi-Fi management.");
+  wifi.addSubCommand("scan").setDescription("Scan networks.").onExecute([](Command&) {});
+
+  cli.printHelp(2);
+
+  // Sub-commands appear
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "scan"));
+  // Argument lines must NOT appear
+  TEST_ASSERT_NULL(strstr(cap.buf, "angle"));
+}
+
+static void test_printHelp_depth3_shows_everything() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  ArgInt h_angle;
+  Command& servo = cli.addCommand("servo").setDescription("Servo control.");
+  h_angle        = servo.addIntArg("angle").setRequired();
+  servo.onExecute([](Command&) {});
+
+  Command& wifi = cli.addCommand("wifi").setDescription("Wi-Fi management.");
+  wifi.addSubCommand("scan").setDescription("Scan networks.").onExecute([](Command&) {});
+
+  cli.printHelp(3);
+
+  // All three levels present
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "servo"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "scan"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "angle"));
+}
+
+static void test_printHelp_default_depth_equals_3() {
+  AdvancedCLI cli;
+  OutputCapture cap_default;
+  OutputCapture cap_3;
+  cli.setOutput(cap_default.fn());
+
+  ArgInt h_angle;
+  Command& servo = cli.addCommand("servo").setDescription("Servo control.");
+  h_angle        = servo.addIntArg("angle").setRequired();
+  servo.onExecute([](Command&) {});
+
+  cli.printHelp();
+  cli.setOutput(cap_3.fn());
+  cli.printHelp(3);
+
+  TEST_ASSERT_EQUAL_STRING(cap_default.buf, cap_3.buf);
+}
+
+/* ---------------------------------------------------------------------------------------------- */
 /*                                Duplicate argument name detection                               */
 /* ---------------------------------------------------------------------------------------------- */
 
@@ -1016,6 +1155,17 @@ void setup() {
 
   // Duplicate arg detection
   RUN_TEST(test_duplicate_arg_name_returns_invalid);
+
+  // getParsedArgCount()
+  RUN_TEST(test_getParsedArgCount_zero_when_no_args_provided);
+  RUN_TEST(test_getParsedArgCount_counts_provided_args);
+  RUN_TEST(test_getParsedArgCount_all_when_all_provided);
+
+  // printHelp(depth)
+  RUN_TEST(test_printHelp_depth1_hides_subcommands_and_args);
+  RUN_TEST(test_printHelp_depth2_shows_subcommands_hides_args);
+  RUN_TEST(test_printHelp_depth3_shows_everything);
+  RUN_TEST(test_printHelp_default_depth_equals_3);
 
   UNITY_END();
 }
