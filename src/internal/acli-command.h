@@ -208,6 +208,16 @@ class Command {
    */
   uint8_t getArgCount() const;
 
+  /**
+   * @brief Get the number of arguments that were actually set during the last parse.
+   *
+   * Valid inside the execution callback. An argument counts as set when it was explicitly provided
+   * in the input OR has a default value.
+   *
+   * @return `uint8_t` Number of set arguments.
+   */
+  uint8_t getParsedArgCount() const;
+
   private:
   const char* _name        = nullptr; // zero-copy: points to registration-time string literal
   const char* _description = nullptr; // zero-copy: points to user-supplied string literal

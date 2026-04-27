@@ -44,6 +44,7 @@
     - [Flags](#flags)
     - [Positional Arguments](#positional-arguments)
   - [Reading Parsed Values](#reading-parsed-values)
+    - [getParsedArgCount()](#getparsedargcount)
   - [Sub-commands](#sub-commands)
   - [Aliases](#aliases)
   - [Help System](#help-system)
@@ -72,7 +73,7 @@ statically allocated buffers; there is no dynamic memory allocation.
 - **Sub-commands** - Two-level hierarchical command structures (e.g. `wifi scan`, `wifi connect -ssid ...`).
 - **Aliases** - Short names for any argument (e.g. `-v` as an alias for `-verbose`).
 - **Validation callbacks** - Per-argument validators that accept or reject values before the command executes.
-- **Help system** - `printHelp()` lists all registered commands, arguments, and descriptions.
+- **Help system** - `printHelp()` lists all registered commands with their arguments and descriptions. An optional `depth` parameter controls the detail level: commands only (`1`), commands and sub-commands (`2`), or full output (`3`, default).
 - **Error routing** - Per-command `onError()` callbacks and per-argument `onInvalid()` callbacks.
 - **Case-insensitive by default** - Command and argument matching is case-insensitive unless changed with `setCaseSensitive(true)`.
 
@@ -301,6 +302,22 @@ ParsedAny field = cmd.getArgByName("field");
 if (field.isSet()) Serial.println(field.getValue());
 ```
 
+### getParsedArgCount()
+
+`cmd.getParsedArgCount()` returns the number of arguments that were explicitly provided or carried a default value during the last parse. Call it inside the execution callback to branch on how many arguments were supplied without testing each one individually:
+
+```cpp
+wifi_cmd.onExecute([](Command& cmd) {
+  Serial.print("Arguments set: ");
+  Serial.println(cmd.getParsedArgCount()); // e.g. 2 if -ssid and -pass were provided
+
+  ParsedStr ssid = cmd.getArg(wifi_ssid);
+  // ...
+});
+```
+
+An argument counts as set when it was explicitly provided in the input **or** has a default value.
+
 ## Sub-commands
 
 Sub-commands create a two-level command hierarchy. The parser dispatches `wifi scan` to the `scan` sub-command of `wifi`:
@@ -349,24 +366,42 @@ Attach an output sink, then call `printHelp()` at any time:
 ```cpp
 cli.setOutput([](const char* msg) { Serial.println(msg); });
 
-cli.printHelp();          // Print all commands
-cli.printHelp("wifi");    // Print help for a single command (and its sub-commands)
+cli.printHelp();           // Full output: commands, sub-commands, and arguments (depth 3, default)
+cli.printHelp(1);          // Commands only
+cli.printHelp(2);          // Commands and sub-commands
+cli.printHelp(3);          // Commands, sub-commands, and arguments (same as no argument)
+cli.printHelp("wifi");     // Full output for a single named command
+cli.printHelp("wifi", 2);  // Single command, commands and sub-commands only
 ```
 
-A standard `help` command implementation using an optional positional target:
+The `depth` parameter controls how much is printed:
+
+| Depth | What is shown                             |
+| ----- | ----------------------------------------- |
+| `1`   | Command names and descriptions only       |
+| `2`   | Commands and their sub-commands           |
+| `3`   | Commands, sub-commands, and all arguments |
+
+A `help` command that accepts an optional target and depth:
 
 ```cpp
 static ArgStr help_target;
+static ArgInt help_depth;
 
 Command& help_cmd = cli.addCommand("help");
 help_cmd.setDescription("Prints available commands.");
 help_target = help_cmd.addPosArg("command").setDescription("Command name (optional).");
+help_depth  = help_cmd.addIntArg("depth", 3).setDescription("Detail level: 1=cmds, 2=+sub, 3=full.");
 help_cmd.onExecute([](Command& cmd) {
   ParsedStr target = cmd.getArg(help_target);
+  ParsedInt depth  = cmd.getArg(help_depth);
+  int32_t d = depth.getValue();
+  if (d < 1) d = 1;
+  if (d > 3) d = 3;
   if (target.isSet()) {
-    cli.printHelp(target.getValue());
+    cli.printHelp(target.getValue(), static_cast<uint8_t>(d));
   } else {
-    cli.printHelp();
+    cli.printHelp(static_cast<uint8_t>(d));
   }
 });
 ```

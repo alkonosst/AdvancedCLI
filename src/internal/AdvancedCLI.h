@@ -91,17 +91,24 @@ class AdvancedCLI {
   /* ------------------------------------------- Help ------------------------------------------- */
 
   /**
-   * @brief Print all registered commands with their descriptions and arguments to the configured
-   * output sink.
+   * @brief Print registered commands to the configured output sink.
+   *
+   * The optional `depth` argument controls how much detail is printed:
+   * - `1`: command names and descriptions only.
+   * - `2`: commands + sub-command names and descriptions (no argument lines).
+   * - `3` (default): full output - commands, sub-commands, and all argument lines.
+   *
+   * @param depth Detail level (1-3). Values outside [1, 3] are clamped.
    */
-  void printHelp() const;
+  void printHelp(uint8_t depth = 3) const;
 
   /**
    * @brief Print the help entry for a single named command (and its sub-commands). Does nothing if
    * the command is not found.
    * @param cmd_name Name of the command to print.
+   * @param depth Detail level (1-3). See `printHelp(uint8_t)` for depth semantics.
    */
-  void printHelp(const char* cmd_name) const;
+  void printHelp(const char* cmd_name, uint8_t depth = 3) const;
 
   /* ----------------------------------- Inject (unit-testing) ---------------------------------- */
 
@@ -185,8 +192,8 @@ class AdvancedCLI {
   // usage_str is appended to the sink output when no callback is registered.
   void _fireError(Command& cmd, const char* message, const char* usage_str = nullptr);
 
-  // Print one command entry (name, description, args) at the given indent level
-  void _printCommandEntry(const Command& cmd, uint8_t indent) const;
+  // Print one command entry (name, description, and optionally args) at the given indent level
+  void _printCommandEntry(const Command& cmd, uint8_t indent, bool print_args) const;
 };
 
 } // namespace ACLI
