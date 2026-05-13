@@ -340,15 +340,25 @@ bool AdvancedCLI::lastParseOk() const { return _last_parse_ok; }
 
 uint8_t AdvancedCLI::commandCount() const { return _cmd_count; }
 
+uint8_t AdvancedCLI::argCount() const { return _arg_pool_used; }
+
+bool AdvancedCLI::isValid() const { return !_overflow; }
+
 /* --------------------------------------- Private methods -------------------------------------- */
 
 Command& AdvancedCLI::_addCommandInternal(const char* name, int8_t parent_idx) {
   if (!name || _cmd_count >= Config::MAX_COMMANDS) {
-    _dummy = Command{};
+    _overflow = true;
+    _dummy    = Command{};
     return _dummy;
   }
   uint8_t new_idx = _cmd_count++;
   _commands[new_idx]._init(name, this, new_idx, parent_idx);
+
+  _commands[new_idx]._arg_pool_start = _arg_pool_used;
+  _commands[new_idx]._arg_defs       = &_arg_def_pool[_arg_pool_used];
+  _commands[new_idx]._parsed         = &_parsed_pool[_arg_pool_used];
+
   return _commands[new_idx];
 }
 

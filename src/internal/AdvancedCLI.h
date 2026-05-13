@@ -152,14 +152,46 @@ class AdvancedCLI {
 
   /**
    * @brief Get the number of registered top-level commands.
+   *
+   * Use this together with `MAX_COMMANDS` to gauge command table utilisation during setup.
+   *
    * @return `uint8_t` Number of registered commands.
    */
   uint8_t commandCount() const;
+
+  /**
+   * @brief Get the total number of argument pool slots consumed by registered commands.
+   *
+   * Use this together with `MAX_ARGS_TOTAL` to gauge pool utilisation during setup.
+   *
+   * @return `uint8_t` Number of pool slots consumed.
+   */
+  uint8_t argCount() const;
+
+  /**
+   * @brief Verify that no registration overflow has occurred.
+   *
+   * Returns `false` if any `addCommand()` or `addSubCommand()` call was silently dropped because
+   * the command table (`MAX_COMMANDS`) was full, or a command could not receive argument capacity
+   * because the pool (`MAX_ARGS_TOTAL`) was exhausted.
+   *
+   * Call this once at the end of `setup()` to confirm that all registrations succeeded.
+   *
+   * @return `true` if all registrations succeeded; `false` on overflow.
+   */
+  bool isValid() const;
 
   private:
   Command _commands[Config::MAX_COMMANDS] = {};
   uint8_t _cmd_count                      = 0;
 
+  // Argument pool: all ArgDef and ParsedArg instances live here.
+  // Each add*Arg() call consumes exactly one slot.
+  detail::ArgDef _arg_def_pool[Config::MAX_ARGS_TOTAL]   = {};
+  detail::ParsedArg _parsed_pool[Config::MAX_ARGS_TOTAL] = {};
+  uint8_t _arg_pool_used                                 = 0;
+
+  bool _overflow       = false; // true when MAX_COMMANDS or MAX_ARGS_TOTAL is exceeded
   bool _case_sensitive = false;
   bool _last_parse_ok  = true; // false when parse() encounters any error
 
