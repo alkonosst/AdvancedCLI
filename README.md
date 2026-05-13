@@ -491,26 +491,26 @@ servo_angle = servo_cmd.addIntArg("angle")
 
 All capacity limits are compile-time constants that can be overridden via `build_flags` in `platformio.ini`, or via `#define` before including the header.
 
-| Macro                       | AVR default | 32-bit default | Description                                                     |
-| --------------------------- | ----------- | -------------- | --------------------------------------------------------------- |
-| `ACLI_MAX_COMMANDS`         | 4           | 16             | Maximum number of registered commands (including sub-commands). |
-| `ACLI_MAX_ARGS_PER_CMD`     | 4           | 8              | Maximum arguments per command.                                  |
-| `ACLI_MAX_NAME_LEN`         | 8           | 24             | Maximum length of a command or argument name (characters).      |
-| `ACLI_MAX_VALUE_LEN`        | 32          | 64             | Maximum length of a parsed argument value (characters).         |
-| `ACLI_MAX_DESC_LEN`         | 16          | 64             | Maximum description string length stored inline.                |
-| `ACLI_MAX_INPUT_LEN`        | 64          | 256            | Maximum parseable input line length (characters).               |
-| `ACLI_MAX_ALIASES`          | 1           | 4              | Maximum aliases per argument.                                   |
-| `ACLI_ENABLE_VALIDATION_FN` | 0           | 1              | Enable `setValidator()` support.                                |
-| `ACLI_ENABLE_INVALID_FN`    | 0           | 1              | Enable `onInvalid()` support.                                   |
+| Macro                       | AVR default | 32-bit default | Description                                                                                                                            |
+| --------------------------- | ----------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `ACLI_MAX_COMMANDS`         | 4           | 16             | Maximum number of registered commands (including sub-commands).                                                                        |
+| `ACLI_MAX_ARGS_TOTAL`       | 10          | 48             | Total argument slots shared across all commands. Tune this to the exact number of arguments registered across your entire application. |
+| `ACLI_MAX_NAME_LEN`         | 8           | 24             | Maximum length of a command or argument name (characters).                                                                             |
+| `ACLI_MAX_VALUE_LEN`        | 32          | 64             | Maximum length of a parsed argument value (characters).                                                                                |
+| `ACLI_MAX_DESC_LEN`         | 16          | 64             | Maximum description string length stored inline.                                                                                       |
+| `ACLI_MAX_INPUT_LEN`        | 64          | 256            | Maximum parseable input line length (characters).                                                                                      |
+| `ACLI_MAX_ALIASES`          | 1           | 4              | Maximum aliases per argument.                                                                                                          |
+| `ACLI_ENABLE_VALIDATION_FN` | 0           | 1              | Enable `setValidator()` support.                                                                                                       |
+| `ACLI_ENABLE_INVALID_FN`    | 0           | 1              | Enable `onInvalid()` support.                                                                                                          |
 
 Example override in `platformio.ini`:
 
 ```ini
 [env:my_board]
 build_flags =
-  -D ACLI_MAX_COMMANDS=32
-  -D ACLI_MAX_ARGS_PER_CMD=12
-  -D ACLI_ENABLE_VALIDATION_FN=1
+  -D ACLI_MAX_COMMANDS=32         ; allow more commands
+  -D ACLI_MAX_ARGS_TOTAL=64       ; allow more total arguments across all commands
+  -D ACLI_ENABLE_VALIDATION_FN=1  ; enable argument validators (disabled by default on AVR to save RAM)
 ```
 
 ## Platform Notes

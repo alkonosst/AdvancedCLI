@@ -29,12 +29,12 @@ bool ArgBaseImpl::isValid() const { return _cmd != nullptr && _arg_index >= 0; }
 ArgBaseImpl::operator bool() const { return isValid(); }
 
 ArgDef* ArgBaseImpl::_def() const {
-  if (!_cmd || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
+  if (!_cmd || !_cmd->_arg_defs || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
   return &_cmd->_arg_defs[_arg_index];
 }
 
 ParsedArg* ArgBaseImpl::_parsed() const {
-  if (!_cmd || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
+  if (!_cmd || !_cmd->_parsed || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
   return &_cmd->_parsed[_arg_index];
 }
 
@@ -96,12 +96,12 @@ bool ArgReaderBase::isValid() const { return _cmd != nullptr && _arg_index >= 0;
 ArgReaderBase::operator bool() const { return isValid(); }
 
 const ArgDef* ArgReaderBase::_def() const {
-  if (!_cmd || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
+  if (!_cmd || !_cmd->_arg_defs || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
   return &_cmd->_arg_defs[_arg_index];
 }
 
 const ParsedArg* ArgReaderBase::_parsed() const {
-  if (!_cmd || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
+  if (!_cmd || !_cmd->_parsed || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
   return &_cmd->_parsed[_arg_index];
 }
 

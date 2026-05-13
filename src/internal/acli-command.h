@@ -222,9 +222,10 @@ class Command {
   const char* _name        = nullptr; // zero-copy: points to registration-time string literal
   const char* _description = nullptr; // zero-copy: points to user-supplied string literal
 
-  detail::ArgDef _arg_defs[Config::MAX_ARGS_PER_CMD]  = {};
-  detail::ParsedArg _parsed[Config::MAX_ARGS_PER_CMD] = {};
-  uint8_t _arg_count                                  = 0;
+  detail::ArgDef* _arg_defs  = nullptr; // points into AdvancedCLI::_arg_def_pool
+  detail::ParsedArg* _parsed = nullptr; // points into AdvancedCLI::_parsed_pool
+  uint8_t _arg_count         = 0;
+  uint8_t _arg_pool_start    = 0; // pool index of this command's first argument slot
 
   CallbackFn _callback{};
   ErrorFn _error_callback{};

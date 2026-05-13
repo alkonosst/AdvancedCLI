@@ -132,6 +132,7 @@ bool Command::isValid() const { return _name != nullptr; }
 uint8_t Command::getArgCount() const { return _arg_count; }
 
 uint8_t Command::getParsedArgCount() const {
+  if (!_parsed) return 0;
   uint8_t count = 0;
   for (uint8_t i = 0; i < _arg_count; ++i) {
     if (_parsed[i].is_set) ++count;
@@ -149,6 +150,7 @@ void Command::_init(const char* name, AdvancedCLI* owner, int8_t self_idx, int8_
 }
 
 void Command::_resetParsed() {
+  if (!_arg_defs || !_parsed) return;
   for (uint8_t i = 0; i < _arg_count; ++i) {
     _parsed[i].def    = &_arg_defs[i];
     _parsed[i].is_set = false;
@@ -183,15 +185,28 @@ int8_t Command::_positionalArgIndex(int8_t pos_idx) const {
 }
 
 int8_t Command::_addArgInternal(const char* name, ArgType type, ArgValueType value_type) {
-  if (_arg_count >= Config::MAX_ARGS_PER_CMD || !name) return -1;
+  if (!_owner || !name) return -1;
+
+  // Contiguity guard: all args for this command must be registered before any sibling or child
+  // command is registered. If this command's "tail" in the pool no longer aligns with the current
+  // pool end, another command was registered in between. Reject to avoid overlap.
+  if (_arg_pool_start + _arg_count != _owner->_arg_pool_used) return -1;
+
+  // Global pool overflow check.
+  if (_owner->_arg_pool_used >= Config::MAX_ARGS_TOTAL) {
+    _owner->_overflow = true;
+    return -1;
+  }
 
   // Detect duplicate argument names at registration time (debug guard).
   for (uint8_t i = 0; i < _arg_count; ++i) {
     if (_arg_defs[i].name && strcmp(_arg_defs[i].name, name) == 0) return -1;
   }
 
-  int8_t new_idx  = static_cast<int8_t>(_arg_count++);
-  ArgDef& arg_def = _arg_defs[new_idx]; // already zero-initialised
+  int8_t new_idx = static_cast<int8_t>(_arg_count++);
+  ++_owner->_arg_pool_used; // claim exactly one slot from the shared pool
+
+  ArgDef& arg_def = _arg_defs[new_idx]; // already zero-initialised at AdvancedCLI construction
 
   arg_def.name       = name; // zero-copy: caller must pass a string literal
   arg_def.type       = type;

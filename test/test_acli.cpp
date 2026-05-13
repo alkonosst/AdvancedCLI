@@ -92,6 +92,91 @@ static void test_commandCount() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
+/*                                          argCount()                                            */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_argCount_zero_with_no_commands() {
+  AdvancedCLI cli;
+  TEST_ASSERT_EQUAL(0, cli.argCount());
+}
+
+static void test_argCount_increments_per_command() {
+  AdvancedCLI cli;
+  // argCount() returns the number of actual argument registrations, not reserved slots.
+  auto& a = cli.addCommand("a");
+  a.addArg("x"); // 1 slot
+  auto& b = cli.addCommand("b");
+  b.addIntArg("y"); // 1 slot
+  b.addIntArg("z"); // 1 slot
+  TEST_ASSERT_EQUAL(3, cli.argCount());
+}
+
+static void test_argCount_includes_subcommands() {
+  AdvancedCLI cli;
+  // argCount() reflects actual addArg() calls across parent and child commands.
+  auto& parent = cli.addCommand("parent");
+  parent.addArg("p1"); // 1 slot
+  auto& child = parent.addSubCommand("child");
+  child.addArg("c1");    // 1 slot
+  child.addIntArg("c2"); // 1 slot
+  TEST_ASSERT_EQUAL(3, cli.argCount());
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                                           isValid()                                            */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_isValid_true_on_empty_cli() {
+  AdvancedCLI cli;
+  TEST_ASSERT_TRUE(cli.isValid());
+}
+
+static void test_isValid_true_after_normal_registration() {
+  AdvancedCLI cli;
+  cli.addCommand("ping").onExecute([](Command&) {});
+  cli.addCommand("pong").onExecute([](Command&) {});
+  TEST_ASSERT_TRUE(cli.isValid());
+}
+
+static void test_isValid_false_on_command_overflow() {
+  // Fill the command table to capacity, then attempt one more registration.
+  AdvancedCLI cli;
+  char name[4] = "c0";
+  for (uint8_t i = 0; i < Config::MAX_COMMANDS; ++i) {
+    name[1] = static_cast<char>('0' + (i % 10));
+    name[2] = static_cast<char>('0' + (i / 10));
+    name[3] = '\0';
+    cli.addCommand(name);
+  }
+  // Table is now full; this extra call must set _overflow.
+  cli.addCommand("overflow");
+  TEST_ASSERT_FALSE(cli.isValid());
+}
+
+static void test_isValid_false_on_args_overflow() {
+  // Fill the entire argument pool using a single command, then attempt one more addArg.
+  // A single command can hold all MAX_ARGS_TOTAL slots because there is no per-command limit.
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("fill");
+
+  // Names must outlive the loop
+  char names[Config::MAX_ARGS_TOTAL][4] = {};
+
+  for (uint8_t i = 0; i < Config::MAX_ARGS_TOTAL; ++i) {
+    names[i][0] = 'a';
+    names[i][1] = static_cast<char>('0' + (i % 10));
+    names[i][2] = static_cast<char>('0' + (i / 10));
+    names[i][3] = '\0';
+    cmd.addIntArg(names[i]);
+  }
+  TEST_ASSERT_EQUAL(Config::MAX_ARGS_TOTAL, cli.argCount());
+
+  // One more arg must trigger overflow.
+  cmd.addIntArg("boom");
+  TEST_ASSERT_FALSE(cli.isValid());
+}
+
+/* ---------------------------------------------------------------------------------------------- */
 /*                                      Named string argument                                     */
 /* ---------------------------------------------------------------------------------------------- */
 
@@ -1060,6 +1145,17 @@ void setup() {
   RUN_TEST(test_basic_dispatch);
   RUN_TEST(test_unknown_command_returns_false);
   RUN_TEST(test_commandCount);
+
+  // argCount()
+  RUN_TEST(test_argCount_zero_with_no_commands);
+  RUN_TEST(test_argCount_increments_per_command);
+  RUN_TEST(test_argCount_includes_subcommands);
+
+  // isValid()
+  RUN_TEST(test_isValid_true_on_empty_cli);
+  RUN_TEST(test_isValid_true_after_normal_registration);
+  RUN_TEST(test_isValid_false_on_command_overflow);
+  RUN_TEST(test_isValid_false_on_args_overflow);
 
   // Named string arg
   RUN_TEST(test_named_string_arg_provided);

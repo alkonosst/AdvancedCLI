@@ -48,8 +48,8 @@
 #  ifndef ACLI_MAX_COMMANDS
 #    define ACLI_MAX_COMMANDS 4
 #  endif
-#  ifndef ACLI_MAX_ARGS_PER_CMD
-#    define ACLI_MAX_ARGS_PER_CMD 4
+#  ifndef ACLI_MAX_ARGS_TOTAL
+#    define ACLI_MAX_ARGS_TOTAL 10
 #  endif
 #  ifndef ACLI_MAX_NAME_LEN
 #    define ACLI_MAX_NAME_LEN 8
@@ -66,6 +66,9 @@
 #  ifndef ACLI_MAX_ALIASES
 #    define ACLI_MAX_ALIASES 1
 #  endif
+#  ifndef ACLI_MAX_TOKENS
+#    define ACLI_MAX_TOKENS 9 // 1 (command) + 4 named-arg pairs (name + value)
+#  endif
 #  ifndef ACLI_ENABLE_VALIDATION_FN
 #    define ACLI_ENABLE_VALIDATION_FN 0
 #  endif
@@ -77,8 +80,8 @@
 #  ifndef ACLI_MAX_COMMANDS
 #    define ACLI_MAX_COMMANDS 16
 #  endif
-#  ifndef ACLI_MAX_ARGS_PER_CMD
-#    define ACLI_MAX_ARGS_PER_CMD 8
+#  ifndef ACLI_MAX_ARGS_TOTAL
+#    define ACLI_MAX_ARGS_TOTAL 48
 #  endif
 #  ifndef ACLI_MAX_NAME_LEN
 #    define ACLI_MAX_NAME_LEN 24
@@ -95,12 +98,12 @@
 #  ifndef ACLI_MAX_ALIASES
 #    define ACLI_MAX_ALIASES 4
 #  endif
+#  ifndef ACLI_MAX_TOKENS
+#    define ACLI_MAX_TOKENS 21 // 1 (command) + 10 named-arg pairs (name + value)
+#  endif
 #endif
 
 // Derived - also overridable
-#ifndef ACLI_MAX_TOKENS
-#  define ACLI_MAX_TOKENS ((ACLI_MAX_ARGS_PER_CMD * 2) + 1)
-#endif
 #ifndef ACLI_MAX_TOKEN_LEN
 #  define ACLI_MAX_TOKEN_LEN ACLI_MAX_VALUE_LEN
 #endif
@@ -110,11 +113,11 @@
 // from ArgDef, which reduces the size of every registered argument and therefore the total
 // sizeof(AdvancedCLI).
 //
-// On ESP32 with the default configuration (16 commands x 8 args = 136 ArgDefs) and
+// On ESP32 with the default configuration (ACLI_MAX_ARGS_TOTAL = 48 ArgDefs) and
 // sizeof(std::function) == 32:
-//   ACLI_ENABLE_VALIDATION_FN=0 -> saves ~4352 bytes
-//   ACLI_ENABLE_INVALID_FN=0    -> saves ~4352 bytes
-//   both disabled               -> saves ~8704 bytes
+//   ACLI_ENABLE_VALIDATION_FN=0 -> saves ~1536 bytes
+//   ACLI_ENABLE_INVALID_FN=0    -> saves ~1536 bytes
+//   both disabled               -> saves ~3072 bytes
 //
 // Attempting to call setValidator() when ACLI_ENABLE_VALIDATION_FN=0, or onInvalid() when
 // ACLI_ENABLE_INVALID_FN=0, will produce a compile-time error.
@@ -146,8 +149,11 @@ namespace Config {
 // Maximum number of commands that can be registered in a single AdvancedCLI instance.
 static constexpr uint8_t MAX_COMMANDS = ACLI_MAX_COMMANDS;
 
-// Maximum number of arguments per command.
-static constexpr uint8_t MAX_ARGS_PER_CMD = ACLI_MAX_ARGS_PER_CMD;
+// Total argument slots in the shared pool, consumed one slot per add*Arg() call across all
+// registered commands. Tune this to the exact sum of arguments you actually register across all
+// commands and sub-commands.
+// Example: 3 commands with 2, 1, and 4 args respectively -> set MAX_ARGS_TOTAL = 7.
+static constexpr uint8_t MAX_ARGS_TOTAL = ACLI_MAX_ARGS_TOTAL;
 
 // Maximum length (including null terminator) of a command or argument name.
 static constexpr uint8_t MAX_NAME_LEN = ACLI_MAX_NAME_LEN;
@@ -165,7 +171,9 @@ static constexpr uint16_t MAX_INPUT_LEN = ACLI_MAX_INPUT_LEN;
 static constexpr uint8_t MAX_ALIASES = ACLI_MAX_ALIASES;
 
 // Maximum number of tokens the parser splits an input line into.
-// Equals `(MAX_ARGS_PER_CMD * 2) + 1` (command name + all name/value pairs).
+// A command with N named arguments produces at most 1 (command/subcommand name) + N*2
+// tokens (alternating -name / value). Set per-platform to cover the widest expected
+// command; override via ACLI_MAX_TOKENS if your commands have more arguments.
 static constexpr uint8_t MAX_TOKENS = ACLI_MAX_TOKENS;
 
 // Maximum length (including null terminator) of each individual token.
