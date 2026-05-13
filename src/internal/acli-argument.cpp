@@ -93,6 +93,16 @@ bool ArgReaderBase::isSet() const {
 
 bool ArgReaderBase::isValid() const { return _cmd != nullptr && _arg_index >= 0; }
 
+const char* ArgReaderBase::getName() const {
+  const ArgDef* def = _def();
+  return def ? def->name : nullptr;
+}
+
+const char* ArgReaderBase::getDescription() const {
+  const ArgDef* def = _def();
+  return def ? def->description : nullptr;
+}
+
 ArgReaderBase::operator bool() const { return isValid(); }
 
 const ArgDef* ArgReaderBase::_def() const {
