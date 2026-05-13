@@ -1295,6 +1295,18 @@ static void test_persistent_arg_argCount_includes_persistent() {
   TEST_ASSERT_EQUAL(2, cli.argCount()); // 1 persistent + 1 sub-cmd arg
 }
 
+static void test_persistent_arg_registered_after_subcommand_fails() {
+  // Adding an arg to a parent after its first sub-command is registered must be blocked.
+  // Otherwise the parent's arg pool slot and the sub-command's pool start alias each other.
+  AdvancedCLI cli;
+  Command& joy = cli.addCommand("joy");
+  joy.addSubCommand("cal");                  // seals joy
+  ArgInt h_n = joy.addPersistentIntArg("n"); // must fail: returns invalid handle
+
+  TEST_ASSERT_FALSE(h_n.isValid());
+  TEST_ASSERT_FALSE(cli.isValid()); // overflow flag must be set
+}
+
 /* ---------------------------------------------------------------------------------------------- */
 /*                                          setup / loop                                          */
 /* ---------------------------------------------------------------------------------------------- */
@@ -1438,6 +1450,7 @@ void setup() {
   RUN_TEST(test_persistent_arg_multiple_subcommands_share_it);
   RUN_TEST(test_persistent_arg_parent_standalone_still_works);
   RUN_TEST(test_persistent_arg_argCount_includes_persistent);
+  RUN_TEST(test_persistent_arg_registered_after_subcommand_fails);
 
   UNITY_END();
 }

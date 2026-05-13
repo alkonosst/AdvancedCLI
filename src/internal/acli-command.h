@@ -282,7 +282,8 @@ class Command {
   detail::ArgDef* _arg_defs  = nullptr; // points into AdvancedCLI::_arg_def_pool
   detail::ParsedArg* _parsed = nullptr; // points into AdvancedCLI::_parsed_pool
   uint8_t _arg_count         = 0;
-  uint8_t _arg_pool_start    = 0; // pool index of this command's first argument slot
+  uint8_t _arg_pool_start    = 0;     // pool index of this command's first argument slot
+  bool _args_sealed          = false; // true once the first sub-command is registered
 
   CallbackFn _callback{};
   ErrorFn _error_callback{};

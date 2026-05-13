@@ -176,6 +176,7 @@ ParsedAny Command::getArgByName(const char* name) {
 
 Command& Command::addSubCommand(const char* name) {
   if (!_owner) return *this; // unregistered dummy command
+  _args_sealed = true;       // parent can no longer accept new arg registrations
   return _owner->_addCommandInternal(name, _self_idx);
 }
 
@@ -259,6 +260,13 @@ int8_t Command::_positionalArgIndex(int8_t pos_idx) const {
 
 int8_t Command::_addArgInternal(const char* name, ArgType type, ArgValueType value_type) {
   if (!_owner || !name) return -1;
+
+  // Sealed commands have already had sub-commands registered; adding args now would produce pool
+  // overlap (the sub-command's _arg_defs pointer was set to the same pool offset).
+  if (_args_sealed) {
+    _owner->_overflow = true;
+    return -1;
+  }
 
   // Contiguity guard: all args for this command must be registered before any sibling or child
   // command is registered. If this command's "tail" in the pool no longer aligns with the current
