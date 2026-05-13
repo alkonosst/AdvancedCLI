@@ -184,6 +184,18 @@ class ArgReaderBase {
    */
   bool isValid() const;
 
+  /**
+   * @brief Get the name of this argument.
+   * @return `const char*` Argument name string literal, or nullptr if invalid.
+   */
+  const char* getName() const;
+
+  /**
+   * @brief Get the description of this argument.
+   * @return `const char*` Argument description string literal, or nullptr if none/invalid.
+   */
+  const char* getDescription() const;
+
   /** @brief Equivalent to `isValid()`. Allows use in boolean contexts. */
   operator bool() const;
 
