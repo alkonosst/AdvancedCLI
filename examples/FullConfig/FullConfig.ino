@@ -82,6 +82,10 @@ void setup() {
     }
   });
 
+  if (!cli.isValid()) {
+    Serial.println("[WARN] CLI registration overflowed: check MAX_COMMANDS and MAX_ARGS_TOTAL.");
+  }
+
   Serial.print("CLI ready. ");
   Serial.print(cli.commandCount());
   Serial.println(" commands registered (case-sensitive).");

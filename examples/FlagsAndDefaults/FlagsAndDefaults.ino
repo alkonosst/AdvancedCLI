@@ -106,6 +106,10 @@ void setup() {
     }
   });
 
+  if (!cli.isValid()) {
+    Serial.println("[WARN] CLI registration overflowed: check MAX_COMMANDS and MAX_ARGS_TOTAL.");
+  }
+
   Serial.println("> Example ready! Use the provided commands to see them in action.");
 }
 
