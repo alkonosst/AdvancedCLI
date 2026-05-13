@@ -86,6 +86,56 @@ ArgFloat Command::addPosFloatArg(const char* name) {
   return ArgFloat(this, idx);
 }
 
+ArgStr Command::addPersistentArg(const char* name, const char* default_value) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Any);
+  if (idx < 0) return ArgStr();
+  _arg_defs[idx].is_persistent = true;
+  if (default_value) {
+    _arg_defs[idx].default_value.str = default_value;
+    _arg_defs[idx].has_default       = true;
+  }
+  return ArgStr(this, idx);
+}
+
+ArgFlag Command::addPersistentFlag(const char* name) {
+  int8_t idx = _addArgInternal(name, ArgType::Flag, ArgValueType::Any);
+  if (idx < 0) return ArgFlag();
+  _arg_defs[idx].is_persistent = true;
+  return ArgFlag(this, idx);
+}
+
+ArgInt Command::addPersistentIntArg(const char* name) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
+  if (idx < 0) return ArgInt();
+  _arg_defs[idx].is_persistent = true;
+  return ArgInt(this, idx);
+}
+
+ArgInt Command::addPersistentIntArg(const char* name, int32_t default_value) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
+  if (idx < 0) return ArgInt();
+  _arg_defs[idx].is_persistent   = true;
+  _arg_defs[idx].default_value.i = default_value;
+  _arg_defs[idx].has_default     = true;
+  return ArgInt(this, idx);
+}
+
+ArgFloat Command::addPersistentFloatArg(const char* name) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
+  if (idx < 0) return ArgFloat();
+  _arg_defs[idx].is_persistent = true;
+  return ArgFloat(this, idx);
+}
+
+ArgFloat Command::addPersistentFloatArg(const char* name, float default_value) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
+  if (idx < 0) return ArgFloat();
+  _arg_defs[idx].is_persistent   = true;
+  _arg_defs[idx].default_value.f = default_value;
+  _arg_defs[idx].has_default     = true;
+  return ArgFloat(this, idx);
+}
+
 Command& Command::onExecute(CallbackFn cb) {
   _callback = cb;
   return *this;
@@ -107,6 +157,18 @@ ParsedAny Command::getArgByName(const char* name) {
       return ParsedAny(this, i);
     }
   }
+
+  // Fall back to parent's persistent args when this is a sub-command
+  if (_parent_idx >= 0 && _owner) {
+    Command& parent = _owner->_commands[_parent_idx];
+    for (uint8_t i = 0; i < parent._arg_count; ++i) {
+      if (!parent._arg_defs[i].is_persistent) continue;
+      if (matchArgName(parent._arg_defs[i], name, case_sensitive)) {
+        return ParsedAny(&parent, i);
+      }
+    }
+  }
+
   return ParsedAny();
 }
 
@@ -171,6 +233,17 @@ int8_t Command::_findArgDefByName(const char* token) const {
     if (matchArgName(_arg_defs[i], token, case_sensitive)) return static_cast<int8_t>(i);
   }
   return -1;
+}
+
+int8_t Command::_findPersistentArgDefByName(const char* token) const {
+  int8_t idx = _findArgDefByName(token);
+  if (idx < 0) return -1;
+  return _arg_defs[idx].is_persistent ? idx : -1;
+}
+
+Command* Command::_getParent() const {
+  if (_parent_idx < 0 || !_owner) return nullptr;
+  return &_owner->_commands[_parent_idx];
 }
 
 int8_t Command::_positionalArgIndex(int8_t pos_idx) const {

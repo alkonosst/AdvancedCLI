@@ -50,6 +50,7 @@ struct ArgDef {
   ArgType type            = ArgType::Named;
   bool is_required        = false;
   bool has_default        = false;
+  bool is_persistent      = false; // parsed before sub-command token (e.g. "joy -n 2 cal")
 
   // --- Value validation ---
   ArgValueType value_type = ArgValueType::Any; // Int or Float enables type checking
