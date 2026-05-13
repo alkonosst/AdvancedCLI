@@ -106,6 +106,59 @@ class Command {
    */
   ArgFloat addPosFloatArg(const char* name);
 
+  /* -------------------- Persistent argument registration (sub-command args) ------------------- */
+
+  /**
+   * @brief Register a persistent string argument. Persistent arguments are parsed before the
+   * sub-command token and are accessible to all sub-commands.
+   * @param name Argument name without the leading dash.
+   * @param default_value Optional default string literal (zero-copy).
+   * @return `ArgStr` Handle to the registered argument.
+   */
+  ArgStr addPersistentArg(const char* name, const char* default_value = nullptr);
+
+  /**
+   * @brief Register a persistent boolean flag argument. Persistent arguments are parsed before the
+   * sub-command token and are accessible to all sub-commands.
+   * @param name Flag name without the leading dash.
+   * @return `ArgFlag` Handle to the registered flag.
+   */
+  ArgFlag addPersistentFlag(const char* name);
+
+  /**
+   * @brief Register a persistent integer argument. Persistent arguments are parsed before the
+   * sub-command token and are accessible to all sub-commands.
+   * @param name Argument name without the leading dash.
+   * @return `ArgInt` Handle to the registered argument.
+   */
+  ArgInt addPersistentIntArg(const char* name);
+
+  /**
+   * @brief Register a persistent integer argument with a default value. Persistent arguments are
+   * parsed before the sub-command token and are accessible to all sub-commands.
+   * @param name Argument name without the leading dash.
+   * @param default_value Default value used when the argument is not provided.
+   * @return `ArgInt` Handle to the registered argument.
+   */
+  ArgInt addPersistentIntArg(const char* name, int32_t default_value);
+
+  /**
+   * @brief Register a persistent float argument. Persistent arguments are parsed before the
+   * sub-command token and are accessible to all sub-commands.
+   * @param name Argument name without the leading dash.
+   * @return `ArgFloat` Handle to the registered argument.
+   */
+  ArgFloat addPersistentFloatArg(const char* name);
+
+  /**
+   * @brief Register a persistent float argument with a default value. Persistent arguments are
+   * parsed before the sub-command token and are accessible to all sub-commands.
+   * @param name Argument name without the leading dash.
+   * @param default_value Default value used when the argument is not provided.
+   * @return `ArgFloat` Handle to the registered argument.
+   */
+  ArgFloat addPersistentFloatArg(const char* name, float default_value);
+
   /**
    * @brief Register the execution callback, invoked after successful parsing.
    * @param cb Callback of type `CallbackFn`.
@@ -142,8 +195,12 @@ class Command {
   template <typename T>
   typename detail::ReaderOf<T>::type getArg(T& handle) {
     using R = typename detail::ReaderOf<T>::type;
-    if (!handle.isValid() || handle._cmd != this) return R();
-    return R(this, handle._arg_index);
+    if (!handle.isValid()) return R();
+    if (handle._cmd == this) return R(this, handle._arg_index);
+    // Also accept persistent-arg handles from the parent command.
+    // Allows sub-command callbacks to call cmd.getArg(parent_handle).
+    if (_parent_idx >= 0 && handle._cmd == _getParent()) return R(handle._cmd, handle._arg_index);
+    return R();
   }
 
   /**
@@ -225,7 +282,8 @@ class Command {
   detail::ArgDef* _arg_defs  = nullptr; // points into AdvancedCLI::_arg_def_pool
   detail::ParsedArg* _parsed = nullptr; // points into AdvancedCLI::_parsed_pool
   uint8_t _arg_count         = 0;
-  uint8_t _arg_pool_start    = 0; // pool index of this command's first argument slot
+  uint8_t _arg_pool_start    = 0;     // pool index of this command's first argument slot
+  bool _args_sealed          = false; // true once the first sub-command is registered
 
   CallbackFn _callback{};
   ErrorFn _error_callback{};
@@ -246,6 +304,12 @@ class Command {
 
   // Find ArgDef index by token (strips leading dashes before comparing)
   int8_t _findArgDefByName(const char* token) const; // returns index or -1
+
+  // Find ArgDef index by token, restricted to persistent args only
+  int8_t _findPersistentArgDefByName(const char* token) const; // returns index or -1
+
+  // Returns the parent Command* for this sub-command, or nullptr if top-level.
+  Command* _getParent() const;
 
   // Returns the ArgDef index of the nth positional argument (0-based)
   int8_t _positionalArgIndex(int8_t pos_idx) const; // returns ArgDef index of the nth positional

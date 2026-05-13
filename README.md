@@ -46,6 +46,7 @@
   - [Reading Parsed Values](#reading-parsed-values)
     - [getParsedArgCount()](#getparsedargcount)
   - [Sub-commands](#sub-commands)
+  - [Persistent Arguments](#persistent-arguments)
   - [Aliases](#aliases)
   - [Help System](#help-system)
   - [Error Handling](#error-handling)
@@ -71,6 +72,7 @@ statically allocated buffers; there is no dynamic memory allocation.
 - **Typed arguments** - Named, positional, flag, integer, and float arguments with automatic type checking.
 - **Custom output sink** - Attach any print function to route all CLI output (help, errors, etc.) to the desired destination.
 - **Sub-commands** - Two-level hierarchical command structures (e.g. `wifi scan`, `wifi connect -ssid ...`).
+- **Persistent arguments** - Parent-level args supplied before the sub-command name (e.g. `joy -n 2 cal`); readable from all sub-command callbacks.
 - **Aliases** - Short names for any argument (e.g. `-v` as an alias for `-verbose`).
 - **Validation callbacks** - Per-argument validators that accept or reject values before the command executes.
 - **Help system** - `printHelp()` lists all registered commands with their arguments and descriptions. An optional `depth` parameter controls the detail level: commands only (`1`), commands and sub-commands (`2`), or full output (`3`, default).
@@ -341,6 +343,56 @@ connect_cmd.onExecute([](Command& cmd) {
 ```
 
 Sub-commands have their own independent argument sets and are listed under their parent in `printHelp()`.
+
+## Persistent Arguments
+
+A **persistent argument** is registered on the parent command and can be supplied _before_ the sub-command name. All sub-commands of that parent can read it using `getArg()` or `getArgByName()`.
+
+```
+joy -n 0 cal
+joy -n 1 curve -type expo
+joy -n 2 filter -cutoff 80
+```
+
+Register the argument with `addPersistent*Arg()` on the parent command, then read it from inside any sub-command callback:
+
+```cpp
+static ArgInt joy_n;
+
+Command& joy = cli.addCommand("joy");
+joy_n = joy.addPersistentIntArg("n", 0).setDescription("Joystick index (0-3).");
+
+joy.addSubCommand("cal").onExecute([](Command& cmd) {
+  int32_t n = cmd.getArg(joy_n).getValue(); // reads the parent's persistent arg
+  Serial.print("Calibrating joystick "); Serial.println(n);
+});
+
+joy.addSubCommand("filter").onExecute([](Command& cmd) {
+  int32_t n = cmd.getArg(joy_n).getValue(); // same handle, same value
+  // ...
+});
+```
+
+`getArgByName()` inside a sub-command also falls back to the parent's persistent args:
+
+```cpp
+joy.addSubCommand("cal").onExecute([](Command& cmd) {
+  ParsedAny n = cmd.getArgByName("n");
+});
+```
+
+> [!IMPORTANT]
+> Persistent args must be registered on the parent command **before** any `addSubCommand()` call. Calling `addSubCommand()` seals the parent's argument list; any `addPersistent*Arg()` (or `addArg()`) attempted afterwards returns an invalid handle and sets `isValid()` to `false`. The correct order is:
+>
+> ```cpp
+> Command& joy = cli.addCommand("joy");
+> joy_n = joy.addPersistentIntArg("n", 0); // 1. register persistent args first
+> joy.addSubCommand("cal");                // 2. then register sub-commands
+> ```
+
+**Persistent arg types**: `addPersistentArg`, `addPersistentFlag`, `addPersistentIntArg`, `addPersistentFloatArg`; each with the same optional-default and builder-method support as their regular counterparts.
+
+**Standalone parent**: calling the parent command directly (e.g. `joy -n 5` with no sub-command) works exactly as before - persistent args behave like ordinary named args when no sub-command is present.
 
 ## Aliases
 

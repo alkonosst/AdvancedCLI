@@ -86,6 +86,56 @@ ArgFloat Command::addPosFloatArg(const char* name) {
   return ArgFloat(this, idx);
 }
 
+ArgStr Command::addPersistentArg(const char* name, const char* default_value) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Any);
+  if (idx < 0) return ArgStr();
+  _arg_defs[idx].is_persistent = true;
+  if (default_value) {
+    _arg_defs[idx].default_value.str = default_value;
+    _arg_defs[idx].has_default       = true;
+  }
+  return ArgStr(this, idx);
+}
+
+ArgFlag Command::addPersistentFlag(const char* name) {
+  int8_t idx = _addArgInternal(name, ArgType::Flag, ArgValueType::Any);
+  if (idx < 0) return ArgFlag();
+  _arg_defs[idx].is_persistent = true;
+  return ArgFlag(this, idx);
+}
+
+ArgInt Command::addPersistentIntArg(const char* name) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
+  if (idx < 0) return ArgInt();
+  _arg_defs[idx].is_persistent = true;
+  return ArgInt(this, idx);
+}
+
+ArgInt Command::addPersistentIntArg(const char* name, int32_t default_value) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
+  if (idx < 0) return ArgInt();
+  _arg_defs[idx].is_persistent   = true;
+  _arg_defs[idx].default_value.i = default_value;
+  _arg_defs[idx].has_default     = true;
+  return ArgInt(this, idx);
+}
+
+ArgFloat Command::addPersistentFloatArg(const char* name) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
+  if (idx < 0) return ArgFloat();
+  _arg_defs[idx].is_persistent = true;
+  return ArgFloat(this, idx);
+}
+
+ArgFloat Command::addPersistentFloatArg(const char* name, float default_value) {
+  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
+  if (idx < 0) return ArgFloat();
+  _arg_defs[idx].is_persistent   = true;
+  _arg_defs[idx].default_value.f = default_value;
+  _arg_defs[idx].has_default     = true;
+  return ArgFloat(this, idx);
+}
+
 Command& Command::onExecute(CallbackFn cb) {
   _callback = cb;
   return *this;
@@ -107,6 +157,18 @@ ParsedAny Command::getArgByName(const char* name) {
       return ParsedAny(this, i);
     }
   }
+
+  // Fall back to parent's persistent args when this is a sub-command
+  if (_parent_idx >= 0 && _owner) {
+    Command& parent = _owner->_commands[_parent_idx];
+    for (uint8_t i = 0; i < parent._arg_count; ++i) {
+      if (!parent._arg_defs[i].is_persistent) continue;
+      if (matchArgName(parent._arg_defs[i], name, case_sensitive)) {
+        return ParsedAny(&parent, i);
+      }
+    }
+  }
+
   return ParsedAny();
 }
 
@@ -114,6 +176,7 @@ ParsedAny Command::getArgByName(const char* name) {
 
 Command& Command::addSubCommand(const char* name) {
   if (!_owner) return *this; // unregistered dummy command
+  _args_sealed = true;       // parent can no longer accept new arg registrations
   return _owner->_addCommandInternal(name, _self_idx);
 }
 
@@ -173,6 +236,17 @@ int8_t Command::_findArgDefByName(const char* token) const {
   return -1;
 }
 
+int8_t Command::_findPersistentArgDefByName(const char* token) const {
+  int8_t idx = _findArgDefByName(token);
+  if (idx < 0) return -1;
+  return _arg_defs[idx].is_persistent ? idx : -1;
+}
+
+Command* Command::_getParent() const {
+  if (_parent_idx < 0 || !_owner) return nullptr;
+  return &_owner->_commands[_parent_idx];
+}
+
 int8_t Command::_positionalArgIndex(int8_t pos_idx) const {
   int8_t count = 0;
   for (int8_t i = 0; i < _arg_count; ++i) {
@@ -186,6 +260,13 @@ int8_t Command::_positionalArgIndex(int8_t pos_idx) const {
 
 int8_t Command::_addArgInternal(const char* name, ArgType type, ArgValueType value_type) {
   if (!_owner || !name) return -1;
+
+  // Sealed commands have already had sub-commands registered; adding args now would produce pool
+  // overlap (the sub-command's _arg_defs pointer was set to the same pool offset).
+  if (_args_sealed) {
+    _owner->_overflow = true;
+    return -1;
+  }
 
   // Contiguity guard: all args for this command must be registered before any sibling or child
   // command is registered. If this command's "tail" in the pool no longer aligns with the current

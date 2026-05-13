@@ -89,26 +89,96 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
     return _last_parse_ok;
   }
 
-  // Sub-command resolution: if the next token (before any flags) names a registered
-  // sub-command, switch to it.  Falls through to normal positional parsing otherwise.
+  // Shared error message buffer (used across all parse phases below)
+  static char err_msg[Config::MAX_INPUT_LEN];
+
+  // Persistent-arg scan: allow parent persistent args before the sub-command name.
+  // E.g. "joy -n 2 cal" -> persistent -n is consumed by the parent, then "cal" dispatched as sub.
+  Command* parent_cmd = nullptr;
   uint8_t start_token = 1;
-  if (count > 1 && tokens[1][0] != '-') {
-    Command* sub = _findSubCommand(cmd, tokens[1]);
-    if (sub) {
-      cmd         = sub;
-      start_token = 2;
+  {
+    uint8_t t = 1;
+    while (t < count) {
+      const char* tok = tokens[t];
+      // "--" terminates the persistent-arg scan
+      if (tok[0] == '-' && tok[1] == '-' && tok[2] == '\0') break;
+
+      bool is_named_flag = (tok[0] == '-' && !isNumToken(tok));
+      if (is_named_flag) {
+        int8_t def_idx = cmd->_findPersistentArgDefByName(tok);
+        if (def_idx >= 0) {
+          // Skip this persistent arg and its value token (if it is a named, not a flag)
+          const ArgDef& d = cmd->_arg_defs[def_idx];
+          if (d.type == ArgType::Flag) {
+            ++t;
+          } else {
+            t += (t + 1 < count) ? 2 : 1;
+          }
+        } else {
+          break; // non-persistent flag -> stop scan
+        }
+      } else {
+        // Non-flag token: check if it names a sub-command
+        Command* sub = _findSubCommand(cmd, tok);
+        if (sub) {
+          parent_cmd  = cmd;
+          cmd         = sub;
+          start_token = t + 1;
+        }
+        break; // stop scanning regardless
+      }
     }
   }
 
-  // Reset parsed state
+  // Reset parsed state for both parent (persistent args) and the active command
+  if (parent_cmd) parent_cmd->_resetParsed();
   cmd->_resetParsed();
+
+  // Parse the persistent args that appear before the sub-command token
+  if (parent_cmd) {
+    const uint8_t subcmd_token = start_token - 1; // index of the sub-command name in tokens[]
+    uint8_t t                  = 1;
+    while (t < subcmd_token) {
+      const char* tok    = tokens[t];
+      bool is_named_flag = (tok[0] == '-' && !isNumToken(tok));
+      if (is_named_flag) {
+        int8_t def_idx = parent_cmd->_findArgDefByName(tok);
+        if (def_idx >= 0) {
+          ArgDef& d    = parent_cmd->_arg_defs[def_idx];
+          ParsedArg& p = parent_cmd->_parsed[def_idx];
+          if (d.type == ArgType::Flag) {
+            p.is_set = true;
+            p.token  = "1";
+            ++t;
+          } else {
+            if (isNextTokenValue(t, subcmd_token, tokens)) {
+              p.is_set = true;
+              p.token  = tokens[t + 1];
+              t += 2;
+            } else if (d.has_default) {
+              p.is_set = true;
+              p.token  = (d.value_type == ArgValueType::Any) ? d.default_value.str : nullptr;
+              ++t;
+            } else {
+              snprintf(err_msg, sizeof(err_msg), "[CLI] Argument \"%s\" expects a value.", d.name);
+              _fireError(*parent_cmd, err_msg);
+              ++t;
+            }
+          }
+        } else {
+          ++t; // unknown (scan already validated; skip gracefully)
+        }
+      } else {
+        ++t;
+      }
+    }
+  }
 
   // Walk remaining tokens and fill ParsedArguments.
   // 'positionalOnly' is set when "--" is encountered; all subsequent tokens
   // are treated as positional values regardless of whether they start with '-'.
   int8_t pos_arg_idx   = 0;
   bool positional_only = false;
-  static char err_msg[Config::MAX_INPUT_LEN]; // scratch buffer for per-parse error messages
 
   for (uint8_t t = start_token; t < count;) {
     const char* tok = tokens[t];
@@ -121,7 +191,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
     }
 
     // A token is a flag/arg-name reference when it starts with '-' but is NOT a negative number.
-    // Negative numbers: -5, -3.14, -.5  →  second char is a digit or '.'
+    // Negative numbers: -5, -3.14, -.5  ->  second char is a digit or '.'
     bool is_flag = (!positional_only && tok[0] == '-' && !isNumToken(tok));
 
     if (is_flag) {
@@ -251,6 +321,49 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
       }
     }
 #endif
+  }
+
+  // Validate parent's persistent args when a sub-command was invoked
+  if (parent_cmd) {
+    for (uint8_t i = 0; i < parent_cmd->_arg_count; ++i) {
+      const ArgDef& d = parent_cmd->_arg_defs[i];
+      if (!d.is_persistent) continue;
+      ParsedArg& p = parent_cmd->_parsed[i];
+
+      // Required check
+      if (d.is_required && !p.is_set) {
+        snprintf(err_msg, sizeof(err_msg), "[CLI] Required argument missing: \"-%s\"", d.name);
+        _fireError(*parent_cmd, err_msg, usage_buf);
+        valid = false;
+        continue;
+      }
+
+      if (!p.is_set) continue;
+      if (d.type == ArgType::Flag) continue;
+
+      // Type check
+      if (d.value_type == ArgValueType::Int || d.value_type == ArgValueType::Float) {
+        char* end = nullptr;
+        char pvbuf[24];
+        const char* pv = resolveValue(&p, &d, pvbuf, sizeof(pvbuf));
+        if (d.value_type == ArgValueType::Int) {
+          strtol(pv, &end, 0);
+        } else {
+          strtod(pv, &end);
+        }
+        const bool typeOk = (end != nullptr && end != pv && *end == '\0');
+        if (!typeOk) {
+          char reason[48];
+          snprintf(reason,
+            sizeof(reason),
+            "expected %s, got \"%s\"",
+            d.value_type == ArgValueType::Int ? "integer" : "number",
+            pv);
+          _fireInvalid(*parent_cmd, d, pv, reason, usage_buf);
+          valid = false;
+        }
+      }
+    }
   }
 
   if (!valid) {
@@ -465,10 +578,34 @@ void AdvancedCLI::_outputf(const char* fmt, ...) const {
 
 void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size) const {
   int write_pos;
-  // For sub-commands include the parent name: "wifi connect [-ssid <ssid>]"
+  // For sub-commands include the parent name and its persistent args:
+  // "joy -n <n> cal [-filter <filter>]"
   if (cmd._parent_idx >= 0 && cmd._parent_idx < _cmd_count) {
-    write_pos =
-      snprintf(buf, buf_size, "%s %s", _commands[cmd._parent_idx].getName(), cmd.getName());
+    const Command& parent = _commands[cmd._parent_idx];
+    write_pos             = snprintf(buf, buf_size, "%s", parent.getName());
+    // Interleave parent persistent args between parent name and sub-command name
+    for (uint8_t i = 0; i < parent._arg_count; ++i) {
+      const ArgDef& d = parent._arg_defs[i];
+      if (!d.is_persistent || write_pos >= (int)buf_size - 1) continue;
+      bool is_opt = !d.is_required;
+      switch (d.type) {
+        case ArgType::Flag:
+          write_pos += snprintf(buf + write_pos,
+            buf_size - (size_t)write_pos,
+            is_opt ? " [-%s]" : " -%s",
+            d.name);
+          break;
+        case ArgType::Named:
+          write_pos += snprintf(buf + write_pos,
+            buf_size - (size_t)write_pos,
+            is_opt ? " [-%s <%s>]" : " -%s <%s>",
+            d.name,
+            d.name);
+          break;
+        default: break;
+      }
+    }
+    write_pos += snprintf(buf + write_pos, buf_size - (size_t)write_pos, " %s", cmd.getName());
   } else {
     write_pos = snprintf(buf, buf_size, "%s", cmd.getName());
   }

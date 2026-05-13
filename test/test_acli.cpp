@@ -28,6 +28,7 @@
  * - "--" positional separator
  * - printHelp(cmd_name)
  * - Duplicate arg name detection
+ * - Persistent arguments (addPersistentIntArg / addPersistentFlag / getArgByName fallback)
  */
 
 #include <Arduino.h>
@@ -1132,6 +1133,181 @@ static void test_duplicate_arg_name_returns_invalid() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
+/*                                       Persistent arguments                                     */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_persistent_arg_before_subcommand() {
+  // "joy -n 2 cal" - persistent -n on parent, read inside sub-command callback
+  AdvancedCLI cli;
+  ArgInt h_n;
+  int32_t got_n   = -1;
+  bool cal_called = false;
+
+  Command& joy = cli.addCommand("joy");
+  h_n          = joy.addPersistentIntArg("n", 0);
+
+  joy.addSubCommand("cal").onExecute([&](Command& cmd) {
+    cal_called = true;
+    got_n      = cmd.getArg(h_n).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n 2 cal"));
+  TEST_ASSERT_TRUE(cal_called);
+  TEST_ASSERT_EQUAL(2, got_n);
+}
+
+static void test_persistent_arg_default_used_when_absent() {
+  // "joy cal" - persistent -n absent, default 0 should be returned
+  AdvancedCLI cli;
+  ArgInt h_n;
+  int32_t got_n = -1;
+
+  Command& joy = cli.addCommand("joy");
+  h_n          = joy.addPersistentIntArg("n", 0);
+
+  joy.addSubCommand("cal").onExecute([&](Command& cmd) { got_n = cmd.getArg(h_n).getValue(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy cal"));
+  TEST_ASSERT_EQUAL(0, got_n);
+}
+
+static void test_persistent_arg_readable_via_getArgByName_in_sub() {
+  // getArgByName("n") inside a sub-command falls back to parent's persistent arg
+  AdvancedCLI cli;
+  int32_t got_n = -1;
+
+  Command& joy = cli.addCommand("joy");
+  joy.addPersistentIntArg("n", 7);
+
+  joy.addSubCommand("cal").onExecute([&](Command& cmd) {
+    auto a = cmd.getArgByName("n");
+    got_n  = a.isValid() ? static_cast<int32_t>(strtol(a.getValue(), nullptr, 0)) : -99;
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n 3 cal"));
+  TEST_ASSERT_EQUAL(3, got_n);
+}
+
+static void test_persistent_flag_before_subcommand() {
+  // "joy -verbose cal" - persistent flag on parent, read via getArg inside sub
+  AdvancedCLI cli;
+  ArgFlag h_v;
+  bool got_verbose = false;
+
+  Command& joy = cli.addCommand("joy");
+  h_v          = joy.addPersistentFlag("verbose");
+
+  joy.addSubCommand("cal").onExecute([&](Command& cmd) { got_verbose = cmd.getArg(h_v).isSet(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -verbose cal"));
+  TEST_ASSERT_TRUE(got_verbose);
+}
+
+static void test_persistent_flag_absent_is_false() {
+  AdvancedCLI cli;
+  ArgFlag h_v;
+  bool got_verbose = true; // start true
+
+  Command& joy = cli.addCommand("joy");
+  h_v          = joy.addPersistentFlag("verbose");
+
+  joy.addSubCommand("cal").onExecute([&](Command& cmd) { got_verbose = cmd.getArg(h_v).isSet(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy cal"));
+  TEST_ASSERT_FALSE(got_verbose);
+}
+
+static void test_persistent_required_arg_missing_fails() {
+  // Required persistent arg not provided -> parse should fail, callback not called
+  AdvancedCLI cli;
+  bool called = false;
+
+  Command& joy = cli.addCommand("joy");
+  joy.addPersistentIntArg("n").setRequired();
+
+  joy.addSubCommand("cal").onExecute([&](Command&) { called = true; });
+
+  TEST_ASSERT_FALSE(cli.inject("joy cal"));
+  TEST_ASSERT_FALSE(called);
+}
+
+static void test_persistent_required_arg_provided_succeeds() {
+  AdvancedCLI cli;
+  ArgInt h_n;
+  bool called = false;
+  int32_t got = -1;
+
+  Command& joy = cli.addCommand("joy");
+  h_n          = joy.addPersistentIntArg("n");
+  h_n.setRequired();
+
+  joy.addSubCommand("cal").onExecute([&](Command& cmd) {
+    called = true;
+    got    = cmd.getArg(h_n).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n 1 cal"));
+  TEST_ASSERT_TRUE(called);
+  TEST_ASSERT_EQUAL(1, got);
+}
+
+static void test_persistent_arg_multiple_subcommands_share_it() {
+  // Same persistent handle should be readable in different sub-commands
+  AdvancedCLI cli;
+  ArgInt h_n;
+  int32_t got_cal    = -1;
+  int32_t got_filter = -1;
+
+  Command& joy = cli.addCommand("joy");
+  h_n          = joy.addPersistentIntArg("n", 0);
+
+  joy.addSubCommand("cal").onExecute([&](Command& cmd) { got_cal = cmd.getArg(h_n).getValue(); });
+  joy.addSubCommand("filter").onExecute(
+    [&](Command& cmd) { got_filter = cmd.getArg(h_n).getValue(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n 2 cal"));
+  TEST_ASSERT_TRUE(cli.inject("joy -n 3 filter"));
+  TEST_ASSERT_EQUAL(2, got_cal);
+  TEST_ASSERT_EQUAL(3, got_filter);
+}
+
+static void test_persistent_arg_parent_standalone_still_works() {
+  // Parent command invoked directly (no sub-command) still reads its persistent arg normally
+  AdvancedCLI cli;
+  ArgInt h_n;
+  int32_t got = -1;
+
+  Command& joy = cli.addCommand("joy");
+  h_n          = joy.addPersistentIntArg("n", 5);
+  joy.addSubCommand("cal").onExecute([](Command&) {});
+  joy.onExecute([&](Command& cmd) { got = cmd.getArg(h_n).getValue(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n 9"));
+  TEST_ASSERT_EQUAL(9, got);
+}
+
+static void test_persistent_arg_argCount_includes_persistent() {
+  // addPersistentIntArg must consume a pool slot
+  AdvancedCLI cli;
+  Command& joy = cli.addCommand("joy");
+  joy.addPersistentIntArg("n");
+  joy.addSubCommand("cal").addIntArg("x");
+  TEST_ASSERT_EQUAL(2, cli.argCount()); // 1 persistent + 1 sub-cmd arg
+}
+
+static void test_persistent_arg_registered_after_subcommand_fails() {
+  // Adding an arg to a parent after its first sub-command is registered must be blocked.
+  // Otherwise the parent's arg pool slot and the sub-command's pool start alias each other.
+  AdvancedCLI cli;
+  Command& joy = cli.addCommand("joy");
+  joy.addSubCommand("cal");                  // seals joy
+  ArgInt h_n = joy.addPersistentIntArg("n"); // must fail: returns invalid handle
+
+  TEST_ASSERT_FALSE(h_n.isValid());
+  TEST_ASSERT_FALSE(cli.isValid()); // overflow flag must be set
+}
+
+/* ---------------------------------------------------------------------------------------------- */
 /*                                          setup / loop                                          */
 /* ---------------------------------------------------------------------------------------------- */
 
@@ -1262,6 +1438,19 @@ void setup() {
   RUN_TEST(test_printHelp_depth2_shows_subcommands_hides_args);
   RUN_TEST(test_printHelp_depth3_shows_everything);
   RUN_TEST(test_printHelp_default_depth_equals_3);
+
+  // Persistent arguments
+  RUN_TEST(test_persistent_arg_before_subcommand);
+  RUN_TEST(test_persistent_arg_default_used_when_absent);
+  RUN_TEST(test_persistent_arg_readable_via_getArgByName_in_sub);
+  RUN_TEST(test_persistent_flag_before_subcommand);
+  RUN_TEST(test_persistent_flag_absent_is_false);
+  RUN_TEST(test_persistent_required_arg_missing_fails);
+  RUN_TEST(test_persistent_required_arg_provided_succeeds);
+  RUN_TEST(test_persistent_arg_multiple_subcommands_share_it);
+  RUN_TEST(test_persistent_arg_parent_standalone_still_works);
+  RUN_TEST(test_persistent_arg_argCount_includes_persistent);
+  RUN_TEST(test_persistent_arg_registered_after_subcommand_fails);
 
   UNITY_END();
 }
