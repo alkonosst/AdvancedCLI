@@ -381,7 +381,14 @@ joy.addSubCommand("cal").onExecute([](Command& cmd) {
 });
 ```
 
-**Registration order**: persistent args must be added to the parent command _before_ any `addSubCommand()` call.
+> [!IMPORTANT]
+> Persistent args must be registered on the parent command **before** any `addSubCommand()` call. Calling `addSubCommand()` seals the parent's argument list; any `addPersistent*Arg()` (or `addArg()`) attempted afterwards returns an invalid handle and sets `isValid()` to `false`. The correct order is:
+>
+> ```cpp
+> Command& joy = cli.addCommand("joy");
+> joy_n = joy.addPersistentIntArg("n", 0); // 1. register persistent args first
+> joy.addSubCommand("cal");                // 2. then register sub-commands
+> ```
 
 **Persistent arg types**: `addPersistentArg`, `addPersistentFlag`, `addPersistentIntArg`, `addPersistentFloatArg`; each with the same optional-default and builder-method support as their regular counterparts.
 
