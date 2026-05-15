@@ -91,7 +91,7 @@ struct ParsedArg {
 class ArgBaseImpl {
   public:
   ArgBaseImpl() = default;
-  ArgBaseImpl(Command* cmd, int8_t arg_index);
+  ArgBaseImpl(Command* cmd, int16_t arg_index);
 
   /**
    * @brief Verify if this argument was set in the input. For flags, this means the flag was
@@ -111,8 +111,8 @@ class ArgBaseImpl {
   operator bool() const;
 
   protected:
-  Command* _cmd     = nullptr;
-  int8_t _arg_index = -1;
+  Command* _cmd      = nullptr;
+  int16_t _arg_index = -1;
 
   ArgDef* _def() const;
   ParsedArg* _parsed() const;
@@ -128,7 +128,7 @@ template <typename Derived>
 class ArgBase : public ArgBaseImpl {
   public:
   ArgBase() = default;
-  ArgBase(Command* cmd, int8_t arg_index)
+  ArgBase(Command* cmd, int16_t arg_index)
       : ArgBaseImpl(cmd, arg_index) {}
 
   /**
@@ -168,7 +168,7 @@ class ArgBase : public ArgBaseImpl {
 class ArgReaderBase {
   public:
   ArgReaderBase() = default;
-  ArgReaderBase(Command* cmd, int8_t arg_index);
+  ArgReaderBase(Command* cmd, int16_t arg_index);
 
   /**
    * @brief Verify if this argument was set in the input. For flags, this means the flag was
@@ -200,8 +200,8 @@ class ArgReaderBase {
   operator bool() const;
 
   protected:
-  Command* _cmd     = nullptr;
-  int8_t _arg_index = -1;
+  Command* _cmd      = nullptr;
+  int16_t _arg_index = -1;
 
   const ArgDef* _def() const;
   const ParsedArg* _parsed() const;
@@ -227,7 +227,7 @@ struct ReaderOf; // deliberately undefined for unknown types
 class ArgStr : public detail::ArgBase<ArgStr> {
   public:
   ArgStr() = default;
-  ArgStr(Command* cmd, int8_t arg_index);
+  ArgStr(Command* cmd, int16_t arg_index);
 
 #if ACLI_ENABLE_VALIDATION_FN
   /**
@@ -249,7 +249,7 @@ class ArgStr : public detail::ArgBase<ArgStr> {
 class ArgFlag : public detail::ArgBase<ArgFlag> {
   public:
   ArgFlag() = default;
-  ArgFlag(Command* cmd, int8_t arg_index);
+  ArgFlag(Command* cmd, int16_t arg_index);
 };
 
 /**
@@ -262,7 +262,7 @@ class ArgFlag : public detail::ArgBase<ArgFlag> {
 class ArgInt : public detail::ArgBase<ArgInt> {
   public:
   ArgInt() = default;
-  ArgInt(Command* cmd, int8_t arg_index);
+  ArgInt(Command* cmd, int16_t arg_index);
 
 #if ACLI_ENABLE_VALIDATION_FN
   /**
@@ -284,7 +284,7 @@ class ArgInt : public detail::ArgBase<ArgInt> {
 class ArgFloat : public detail::ArgBase<ArgFloat> {
   public:
   ArgFloat() = default;
-  ArgFloat(Command* cmd, int8_t arg_index);
+  ArgFloat(Command* cmd, int16_t arg_index);
 
 #if ACLI_ENABLE_VALIDATION_FN
   /**
@@ -305,7 +305,7 @@ class ArgFloat : public detail::ArgBase<ArgFloat> {
 class ParsedAny : public detail::ArgReaderBase {
   public:
   ParsedAny() = default;
-  ParsedAny(Command* cmd, int8_t arg_index);
+  ParsedAny(Command* cmd, int16_t arg_index);
 
   /** @brief Implicit conversion from any typed reader (`ParsedFlag`, `ParsedInt`, etc.). */
   ParsedAny(const detail::ArgReaderBase& base);
@@ -323,7 +323,7 @@ class ParsedAny : public detail::ArgReaderBase {
 class ParsedFlag : public detail::ArgReaderBase {
   public:
   ParsedFlag() = default;
-  ParsedFlag(Command* cmd, int8_t arg_index);
+  ParsedFlag(Command* cmd, int16_t arg_index);
 };
 
 /**
@@ -332,7 +332,7 @@ class ParsedFlag : public detail::ArgReaderBase {
 class ParsedInt : public detail::ArgReaderBase {
   public:
   ParsedInt() = default;
-  ParsedInt(Command* cmd, int8_t arg_index);
+  ParsedInt(Command* cmd, int16_t arg_index);
 
   /**
    * @brief Returns the parsed integer value.
@@ -349,7 +349,7 @@ class ParsedInt : public detail::ArgReaderBase {
 class ParsedFloat : public detail::ArgReaderBase {
   public:
   ParsedFloat() = default;
-  ParsedFloat(Command* cmd, int8_t arg_index);
+  ParsedFloat(Command* cmd, int16_t arg_index);
 
   /**
    * @brief Returns the parsed float value.
@@ -366,7 +366,7 @@ class ParsedFloat : public detail::ArgReaderBase {
 class ParsedStr : public detail::ArgReaderBase {
   public:
   ParsedStr() = default;
-  ParsedStr(Command* cmd, int8_t arg_index);
+  ParsedStr(Command* cmd, int16_t arg_index);
 
   /**
    * @brief Returns the argument value as a string, the registered default, or "".

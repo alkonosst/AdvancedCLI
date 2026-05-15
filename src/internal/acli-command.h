@@ -261,9 +261,9 @@ class Command {
 
   /**
    * @brief Get the number of arguments registered for this command.
-   * @return `uint8_t` Number of registered arguments.
+   * @return `uint16_t` Number of registered arguments.
    */
-  uint8_t getArgCount() const;
+  uint16_t getArgCount() const;
 
   /**
    * @brief Get the number of arguments that were actually set during the last parse.
@@ -271,9 +271,9 @@ class Command {
    * Valid inside the execution callback. An argument counts as set when it was explicitly provided
    * in the input OR has a default value.
    *
-   * @return `uint8_t` Number of set arguments.
+   * @return `uint16_t` Number of set arguments.
    */
-  uint8_t getParsedArgCount() const;
+  uint16_t getParsedArgCount() const;
 
   private:
   const char* _name        = nullptr; // zero-copy: points to registration-time string literal
@@ -281,8 +281,8 @@ class Command {
 
   detail::ArgDef* _arg_defs  = nullptr; // points into AdvancedCLI::_arg_def_pool
   detail::ParsedArg* _parsed = nullptr; // points into AdvancedCLI::_parsed_pool
-  uint8_t _arg_count         = 0;
-  uint8_t _arg_pool_start    = 0;     // pool index of this command's first argument slot
+  uint16_t _arg_count        = 0;
+  uint16_t _arg_pool_start   = 0;     // pool index of this command's first argument slot
   bool _args_sealed          = false; // true once the first sub-command is registered
 
   CallbackFn _callback{};
@@ -290,11 +290,11 @@ class Command {
 
   // Owner linkage (set by AdvancedCLI at registration time)
   AdvancedCLI* _owner = nullptr;
-  int8_t _self_idx    = -1; // index of this Command in owner's _commands[]
-  int8_t _parent_idx  = -1; // -1 = top-level; >=0 = index of parent Command
+  int16_t _self_idx   = -1; // index of this Command in owner's _commands[]
+  int16_t _parent_idx = -1; // -1 = top-level; >=0 = index of parent Command
 
   // Init command (called by AdvancedCLI)
-  void _init(const char* name, AdvancedCLI* owner, int8_t self_idx, int8_t parent_idx = -1);
+  void _init(const char* name, AdvancedCLI* owner, int16_t self_idx, int16_t parent_idx = -1);
 
   // Reset all parsed values before a new parse
   void _resetParsed();
@@ -303,19 +303,19 @@ class Command {
   void _execute();
 
   // Find ArgDef index by token (strips leading dashes before comparing)
-  int8_t _findArgDefByName(const char* token) const; // returns index or -1
+  int16_t _findArgDefByName(const char* token) const; // returns index or -1
 
   // Find ArgDef index by token, restricted to persistent args only
-  int8_t _findPersistentArgDefByName(const char* token) const; // returns index or -1
+  int16_t _findPersistentArgDefByName(const char* token) const; // returns index or -1
 
   // Returns the parent Command* for this sub-command, or nullptr if top-level.
   Command* _getParent() const;
 
   // Returns the ArgDef index of the nth positional argument (0-based)
-  int8_t _positionalArgIndex(int8_t pos_idx) const; // returns ArgDef index of the nth positional
+  int16_t _positionalArgIndex(int16_t pos_idx) const; // returns ArgDef index of the nth positional
 
   // Returns index of newly added ArgDef, or -1 if full
-  int8_t _addArgInternal(const char* name, detail::ArgType type, detail::ArgValueType value_type);
+  int16_t _addArgInternal(const char* name, detail::ArgType type, detail::ArgValueType value_type);
 };
 
 } // namespace ACLI
