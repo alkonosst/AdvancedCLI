@@ -15,7 +15,7 @@ using namespace detail;
 
 /* ----------------------------------------- ArgBaseImpl ---------------------------------------- */
 
-ArgBaseImpl::ArgBaseImpl(Command* cmd, int8_t arg_index)
+ArgBaseImpl::ArgBaseImpl(Command* cmd, int16_t arg_index)
     : _cmd(cmd)
     , _arg_index(arg_index) {}
 
@@ -82,7 +82,7 @@ template class ArgBase<ArgFloat>;
 
 /* ---------------------------------------- ArgReaderBase --------------------------------------- */
 
-ArgReaderBase::ArgReaderBase(Command* cmd, int8_t arg_index)
+ArgReaderBase::ArgReaderBase(Command* cmd, int16_t arg_index)
     : _cmd(cmd)
     , _arg_index(arg_index) {}
 
@@ -122,7 +122,7 @@ const char* ArgReaderBase::_rawValue() const {
 
 /* ------------------------------------------- ArgStr ------------------------------------------- */
 
-ArgStr::ArgStr(Command* cmd, int8_t arg_index)
+ArgStr::ArgStr(Command* cmd, int16_t arg_index)
     : detail::ArgBase<ArgStr>(cmd, arg_index) {}
 
 #if ACLI_ENABLE_VALIDATION_FN
@@ -140,12 +140,12 @@ ArgStr& ArgStr::setValidator(ValidationFn<const char*> fn) {
 
 /* ------------------------------------------- ArgFlag ------------------------------------------ */
 
-ArgFlag::ArgFlag(Command* cmd, int8_t arg_index)
+ArgFlag::ArgFlag(Command* cmd, int16_t arg_index)
     : detail::ArgBase<ArgFlag>(cmd, arg_index) {}
 
 /* ------------------------------------------- ArgInt ------------------------------------------- */
 
-ArgInt::ArgInt(Command* cmd, int8_t arg_index)
+ArgInt::ArgInt(Command* cmd, int16_t arg_index)
     : detail::ArgBase<ArgInt>(cmd, arg_index) {}
 
 #if ACLI_ENABLE_VALIDATION_FN
@@ -168,7 +168,7 @@ ArgInt& ArgInt::setValidator(ValidationFn<int32_t> fn) {
 
 /* ------------------------------------------ ArgFloat ------------------------------------------ */
 
-ArgFloat::ArgFloat(Command* cmd, int8_t arg_index)
+ArgFloat::ArgFloat(Command* cmd, int16_t arg_index)
     : detail::ArgBase<ArgFloat>(cmd, arg_index) {}
 
 #if ACLI_ENABLE_VALIDATION_FN
@@ -191,7 +191,7 @@ ArgFloat& ArgFloat::setValidator(ValidationFn<float> fn) {
 
 /* ------------------------------------------ ParsedAny ----------------------------------------- */
 
-ParsedAny::ParsedAny(Command* cmd, int8_t arg_index)
+ParsedAny::ParsedAny(Command* cmd, int16_t arg_index)
     : detail::ArgReaderBase(cmd, arg_index) {}
 
 ParsedAny::ParsedAny(const detail::ArgReaderBase& base)
@@ -201,12 +201,12 @@ const char* ParsedAny::getValue() const { return _rawValue(); }
 
 /* ----------------------------------------- ParsedFlag ----------------------------------------- */
 
-ParsedFlag::ParsedFlag(Command* cmd, int8_t arg_index)
+ParsedFlag::ParsedFlag(Command* cmd, int16_t arg_index)
     : detail::ArgReaderBase(cmd, arg_index) {}
 
 /* ------------------------------------------ ParsedInt ----------------------------------------- */
 
-ParsedInt::ParsedInt(Command* cmd, int8_t arg_index)
+ParsedInt::ParsedInt(Command* cmd, int16_t arg_index)
     : detail::ArgReaderBase(cmd, arg_index) {}
 
 int32_t ParsedInt::getValue(int32_t default_value) const {
@@ -217,7 +217,7 @@ int32_t ParsedInt::getValue(int32_t default_value) const {
 
 /* ----------------------------------------- ParsedFloat ---------------------------------------- */
 
-ParsedFloat::ParsedFloat(Command* cmd, int8_t arg_index)
+ParsedFloat::ParsedFloat(Command* cmd, int16_t arg_index)
     : detail::ArgReaderBase(cmd, arg_index) {}
 
 float ParsedFloat::getValue(float default_value) const {
@@ -228,7 +228,7 @@ float ParsedFloat::getValue(float default_value) const {
 
 /* ------------------------------------------ ParsedStr ----------------------------------------- */
 
-ParsedStr::ParsedStr(Command* cmd, int8_t arg_index)
+ParsedStr::ParsedStr(Command* cmd, int16_t arg_index)
     : detail::ArgReaderBase(cmd, arg_index) {}
 
 const char* ParsedStr::getValue() const { return _rawValue(); }

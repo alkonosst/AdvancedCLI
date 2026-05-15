@@ -155,18 +155,18 @@ class AdvancedCLI {
    *
    * Use this together with `MAX_COMMANDS` to gauge command table utilisation during setup.
    *
-   * @return `uint8_t` Number of registered commands.
+   * @return `uint16_t` Number of registered commands.
    */
-  uint8_t commandCount() const;
+  uint16_t commandCount() const;
 
   /**
    * @brief Get the total number of argument pool slots consumed by registered commands.
    *
    * Use this together with `MAX_ARGS_TOTAL` to gauge pool utilisation during setup.
    *
-   * @return `uint8_t` Number of pool slots consumed.
+   * @return `uint16_t` Number of pool slots consumed.
    */
-  uint8_t argCount() const;
+  uint16_t argCount() const;
 
   /**
    * @brief Verify that no registration overflow has occurred.
@@ -183,13 +183,13 @@ class AdvancedCLI {
 
   private:
   Command _commands[Config::MAX_COMMANDS] = {};
-  uint8_t _cmd_count                      = 0;
+  uint16_t _cmd_count                     = 0;
 
   // Argument pool: all ArgDef and ParsedArg instances live here.
   // Each add*Arg() call consumes exactly one slot.
   detail::ArgDef _arg_def_pool[Config::MAX_ARGS_TOTAL]   = {};
   detail::ParsedArg _parsed_pool[Config::MAX_ARGS_TOTAL] = {};
-  uint8_t _arg_pool_used                                 = 0;
+  uint16_t _arg_pool_used                                = 0;
 
   bool _overflow       = false; // true when MAX_COMMANDS or MAX_ARGS_TOTAL is exceeded
   bool _case_sensitive = false;
@@ -202,7 +202,7 @@ class AdvancedCLI {
   Command _dummy = {}; // returned when addCommand table is full
 
   // Internal helpers
-  Command& _addCommandInternal(const char* name, int8_t parent_idx);
+  Command& _addCommandInternal(const char* name, int16_t parent_idx);
   Command* _findCommand(const char* name, size_t name_len);
   Command* _findSubCommand(const Command* parent, const char* name);
   uint8_t _tokenize(const char* input, size_t input_len, char tokens[][Config::MAX_TOKEN_LEN],

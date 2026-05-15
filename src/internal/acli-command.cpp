@@ -21,7 +21,7 @@ Command& Command::setDescription(const char* description) {
 }
 
 ArgStr Command::addArg(const char* name, const char* default_value) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Any);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Any);
   if (idx < 0) return ArgStr();
   if (default_value) {
     _arg_defs[idx].default_value.str = default_value;
@@ -31,19 +31,19 @@ ArgStr Command::addArg(const char* name, const char* default_value) {
 }
 
 ArgFlag Command::addFlag(const char* name) {
-  int8_t idx = _addArgInternal(name, ArgType::Flag, ArgValueType::Any);
+  int16_t idx = _addArgInternal(name, ArgType::Flag, ArgValueType::Any);
   if (idx < 0) return ArgFlag();
   return ArgFlag(this, idx);
 }
 
 ArgInt Command::addIntArg(const char* name) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
   if (idx < 0) return ArgInt();
   return ArgInt(this, idx);
 }
 
 ArgInt Command::addIntArg(const char* name, int32_t default_value) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
   if (idx < 0) return ArgInt();
   _arg_defs[idx].default_value.i = default_value;
   _arg_defs[idx].has_default     = true;
@@ -51,13 +51,13 @@ ArgInt Command::addIntArg(const char* name, int32_t default_value) {
 }
 
 ArgFloat Command::addFloatArg(const char* name) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
   if (idx < 0) return ArgFloat();
   return ArgFloat(this, idx);
 }
 
 ArgFloat Command::addFloatArg(const char* name, float default_value) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
   if (idx < 0) return ArgFloat();
   _arg_defs[idx].default_value.f = default_value;
   _arg_defs[idx].has_default     = true;
@@ -65,7 +65,7 @@ ArgFloat Command::addFloatArg(const char* name, float default_value) {
 }
 
 ArgStr Command::addPosArg(const char* name, const char* default_value) {
-  int8_t idx = _addArgInternal(name, ArgType::Positional, ArgValueType::Any);
+  int16_t idx = _addArgInternal(name, ArgType::Positional, ArgValueType::Any);
   if (idx < 0) return ArgStr();
   if (default_value) {
     _arg_defs[idx].default_value.str = default_value;
@@ -75,19 +75,19 @@ ArgStr Command::addPosArg(const char* name, const char* default_value) {
 }
 
 ArgInt Command::addPosIntArg(const char* name) {
-  int8_t idx = _addArgInternal(name, ArgType::Positional, ArgValueType::Int);
+  int16_t idx = _addArgInternal(name, ArgType::Positional, ArgValueType::Int);
   if (idx < 0) return ArgInt();
   return ArgInt(this, idx);
 }
 
 ArgFloat Command::addPosFloatArg(const char* name) {
-  int8_t idx = _addArgInternal(name, ArgType::Positional, ArgValueType::Float);
+  int16_t idx = _addArgInternal(name, ArgType::Positional, ArgValueType::Float);
   if (idx < 0) return ArgFloat();
   return ArgFloat(this, idx);
 }
 
 ArgStr Command::addPersistentArg(const char* name, const char* default_value) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Any);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Any);
   if (idx < 0) return ArgStr();
   _arg_defs[idx].is_persistent = true;
   if (default_value) {
@@ -98,21 +98,21 @@ ArgStr Command::addPersistentArg(const char* name, const char* default_value) {
 }
 
 ArgFlag Command::addPersistentFlag(const char* name) {
-  int8_t idx = _addArgInternal(name, ArgType::Flag, ArgValueType::Any);
+  int16_t idx = _addArgInternal(name, ArgType::Flag, ArgValueType::Any);
   if (idx < 0) return ArgFlag();
   _arg_defs[idx].is_persistent = true;
   return ArgFlag(this, idx);
 }
 
 ArgInt Command::addPersistentIntArg(const char* name) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
   if (idx < 0) return ArgInt();
   _arg_defs[idx].is_persistent = true;
   return ArgInt(this, idx);
 }
 
 ArgInt Command::addPersistentIntArg(const char* name, int32_t default_value) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Int);
   if (idx < 0) return ArgInt();
   _arg_defs[idx].is_persistent   = true;
   _arg_defs[idx].default_value.i = default_value;
@@ -121,14 +121,14 @@ ArgInt Command::addPersistentIntArg(const char* name, int32_t default_value) {
 }
 
 ArgFloat Command::addPersistentFloatArg(const char* name) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
   if (idx < 0) return ArgFloat();
   _arg_defs[idx].is_persistent = true;
   return ArgFloat(this, idx);
 }
 
 ArgFloat Command::addPersistentFloatArg(const char* name, float default_value) {
-  int8_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
+  int16_t idx = _addArgInternal(name, ArgType::Named, ArgValueType::Float);
   if (idx < 0) return ArgFloat();
   _arg_defs[idx].is_persistent   = true;
   _arg_defs[idx].default_value.f = default_value;
@@ -152,7 +152,7 @@ ParsedAny Command::getArgByName(const char* name) {
   if (!name) return ParsedAny();
 
   bool case_sensitive = _owner ? _owner->_case_sensitive : false;
-  for (uint8_t i = 0; i < _arg_count; ++i) {
+  for (uint16_t i = 0; i < _arg_count; ++i) {
     if (matchArgName(_arg_defs[i], name, case_sensitive)) {
       return ParsedAny(this, i);
     }
@@ -161,7 +161,7 @@ ParsedAny Command::getArgByName(const char* name) {
   // Fall back to parent's persistent args when this is a sub-command
   if (_parent_idx >= 0 && _owner) {
     Command& parent = _owner->_commands[_parent_idx];
-    for (uint8_t i = 0; i < parent._arg_count; ++i) {
+    for (uint16_t i = 0; i < parent._arg_count; ++i) {
       if (!parent._arg_defs[i].is_persistent) continue;
       if (matchArgName(parent._arg_defs[i], name, case_sensitive)) {
         return ParsedAny(&parent, i);
@@ -192,12 +192,12 @@ void Command::fail(const char* message) {
 const char* Command::getName() const { return _name ? _name : ""; }
 const char* Command::getDescription() const { return _description ? _description : ""; }
 bool Command::isValid() const { return _name != nullptr; }
-uint8_t Command::getArgCount() const { return _arg_count; }
+uint16_t Command::getArgCount() const { return _arg_count; }
 
-uint8_t Command::getParsedArgCount() const {
+uint16_t Command::getParsedArgCount() const {
   if (!_parsed) return 0;
-  uint8_t count = 0;
-  for (uint8_t i = 0; i < _arg_count; ++i) {
+  uint16_t count = 0;
+  for (uint16_t i = 0; i < _arg_count; ++i) {
     if (_parsed[i].is_set) ++count;
   }
   return count;
@@ -205,7 +205,7 @@ uint8_t Command::getParsedArgCount() const {
 
 /* --------------------------------------- Private methods -------------------------------------- */
 
-void Command::_init(const char* name, AdvancedCLI* owner, int8_t self_idx, int8_t parent_idx) {
+void Command::_init(const char* name, AdvancedCLI* owner, int16_t self_idx, int16_t parent_idx) {
   _name       = name;
   _owner      = owner;
   _self_idx   = self_idx;
@@ -214,7 +214,7 @@ void Command::_init(const char* name, AdvancedCLI* owner, int8_t self_idx, int8_
 
 void Command::_resetParsed() {
   if (!_arg_defs || !_parsed) return;
-  for (uint8_t i = 0; i < _arg_count; ++i) {
+  for (uint16_t i = 0; i < _arg_count; ++i) {
     _parsed[i].def    = &_arg_defs[i];
     _parsed[i].is_set = false;
     _parsed[i].token  = nullptr;
@@ -225,19 +225,19 @@ void Command::_execute() {
   if (_callback) _callback(*this);
 }
 
-int8_t Command::_findArgDefByName(const char* token) const {
+int16_t Command::_findArgDefByName(const char* token) const {
   if (!token) return -1;
 
   bool case_sensitive = _owner ? _owner->_case_sensitive : false;
-  for (uint8_t i = 0; i < _arg_count; ++i) {
+  for (uint16_t i = 0; i < _arg_count; ++i) {
     if (_arg_defs[i].type == ArgType::Positional) continue;
-    if (matchArgName(_arg_defs[i], token, case_sensitive)) return static_cast<int8_t>(i);
+    if (matchArgName(_arg_defs[i], token, case_sensitive)) return static_cast<int16_t>(i);
   }
   return -1;
 }
 
-int8_t Command::_findPersistentArgDefByName(const char* token) const {
-  int8_t idx = _findArgDefByName(token);
+int16_t Command::_findPersistentArgDefByName(const char* token) const {
+  int16_t idx = _findArgDefByName(token);
   if (idx < 0) return -1;
   return _arg_defs[idx].is_persistent ? idx : -1;
 }
@@ -247,9 +247,9 @@ Command* Command::_getParent() const {
   return &_owner->_commands[_parent_idx];
 }
 
-int8_t Command::_positionalArgIndex(int8_t pos_idx) const {
-  int8_t count = 0;
-  for (int8_t i = 0; i < _arg_count; ++i) {
+int16_t Command::_positionalArgIndex(int16_t pos_idx) const {
+  int16_t count = 0;
+  for (int16_t i = 0; i < _arg_count; ++i) {
     if (_arg_defs[i].type == ArgType::Positional) {
       if (count == pos_idx) return i;
       ++count;
@@ -258,7 +258,7 @@ int8_t Command::_positionalArgIndex(int8_t pos_idx) const {
   return -1;
 }
 
-int8_t Command::_addArgInternal(const char* name, ArgType type, ArgValueType value_type) {
+int16_t Command::_addArgInternal(const char* name, ArgType type, ArgValueType value_type) {
   if (!_owner || !name) return -1;
 
   // Sealed commands have already had sub-commands registered; adding args now would produce pool
@@ -280,11 +280,11 @@ int8_t Command::_addArgInternal(const char* name, ArgType type, ArgValueType val
   }
 
   // Detect duplicate argument names at registration time (debug guard).
-  for (uint8_t i = 0; i < _arg_count; ++i) {
+  for (uint16_t i = 0; i < _arg_count; ++i) {
     if (_arg_defs[i].name && strcmp(_arg_defs[i].name, name) == 0) return -1;
   }
 
-  int8_t new_idx = static_cast<int8_t>(_arg_count++);
+  int16_t new_idx = static_cast<int16_t>(_arg_count++);
   ++_owner->_arg_pool_used; // claim exactly one slot from the shared pool
 
   ArgDef& arg_def = _arg_defs[new_idx]; // already zero-initialised at AdvancedCLI construction

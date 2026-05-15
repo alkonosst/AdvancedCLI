@@ -59,7 +59,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
 
       // "Did you mean?" - simple prefix match
       const char* candidate = nullptr;
-      for (uint8_t i = 0; i < _cmd_count; ++i) {
+      for (uint16_t i = 0; i < _cmd_count; ++i) {
         if (_commands[i]._parent_idx != -1) continue; // skip sub-commands
         const char* cmd_name = _commands[i].getName();
         size_t token_len     = strlen(tokens[0]);
@@ -105,7 +105,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
 
       bool is_named_flag = (tok[0] == '-' && !isNumToken(tok));
       if (is_named_flag) {
-        int8_t def_idx = cmd->_findPersistentArgDefByName(tok);
+        int16_t def_idx = cmd->_findPersistentArgDefByName(tok);
         if (def_idx >= 0) {
           // Skip this persistent arg and its value token (if it is a named, not a flag)
           const ArgDef& d = cmd->_arg_defs[def_idx];
@@ -142,7 +142,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
       const char* tok    = tokens[t];
       bool is_named_flag = (tok[0] == '-' && !isNumToken(tok));
       if (is_named_flag) {
-        int8_t def_idx = parent_cmd->_findArgDefByName(tok);
+        int16_t def_idx = parent_cmd->_findArgDefByName(tok);
         if (def_idx >= 0) {
           ArgDef& d    = parent_cmd->_arg_defs[def_idx];
           ParsedArg& p = parent_cmd->_parsed[def_idx];
@@ -177,7 +177,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
   // Walk remaining tokens and fill ParsedArguments.
   // 'positionalOnly' is set when "--" is encountered; all subsequent tokens
   // are treated as positional values regardless of whether they start with '-'.
-  int8_t pos_arg_idx   = 0;
+  int16_t pos_arg_idx  = 0;
   bool positional_only = false;
 
   for (uint8_t t = start_token; t < count;) {
@@ -195,7 +195,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
     bool is_flag = (!positional_only && tok[0] == '-' && !isNumToken(tok));
 
     if (is_flag) {
-      int8_t def_idx = cmd->_findArgDefByName(tok);
+      int16_t def_idx = cmd->_findArgDefByName(tok);
 
       if (def_idx < 0) {
         snprintf(err_msg,
@@ -238,7 +238,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
       }
     } else {
       // Positional
-      int8_t def_idx = cmd->_positionalArgIndex(pos_arg_idx);
+      int16_t def_idx = cmd->_positionalArgIndex(pos_arg_idx);
       if (def_idx >= 0) {
         cmd->_parsed[def_idx].is_set = true;
         cmd->_parsed[def_idx].token  = tok; // points into static tokens array
@@ -256,7 +256,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
   static char usage_buf[Config::MAX_INPUT_LEN];
   _buildUsageStr(*cmd, usage_buf, sizeof(usage_buf));
 
-  for (uint8_t i = 0; i < cmd->_arg_count; ++i) {
+  for (uint16_t i = 0; i < cmd->_arg_count; ++i) {
     const ArgDef& d = cmd->_arg_defs[i];
     ParsedArg& p    = cmd->_parsed[i];
 
@@ -325,7 +325,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
 
   // Validate parent's persistent args when a sub-command was invoked
   if (parent_cmd) {
-    for (uint8_t i = 0; i < parent_cmd->_arg_count; ++i) {
+    for (uint16_t i = 0; i < parent_cmd->_arg_count; ++i) {
       const ArgDef& d = parent_cmd->_arg_defs[i];
       if (!d.is_persistent) continue;
       ParsedArg& p = parent_cmd->_parsed[i];
@@ -381,7 +381,7 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
 void AdvancedCLI::printHelp(uint8_t depth) const {
   _output("Available commands:");
 
-  for (uint8_t i = 0; i < _cmd_count; ++i) {
+  for (uint16_t i = 0; i < _cmd_count; ++i) {
     const Command& cmd = _commands[i];
     if (cmd._parent_idx != -1) continue; // sub-commands printed under their parent
 
@@ -389,7 +389,7 @@ void AdvancedCLI::printHelp(uint8_t depth) const {
 
     if (depth >= 2) {
       // Print direct sub-commands indented below the parent
-      for (uint8_t j = 0; j < _cmd_count; ++j) {
+      for (uint16_t j = 0; j < _cmd_count; ++j) {
         if (_commands[j]._parent_idx == i) {
           _printCommandEntry(_commands[j], 4, depth >= 3);
         }
@@ -400,14 +400,14 @@ void AdvancedCLI::printHelp(uint8_t depth) const {
 
 void AdvancedCLI::printHelp(const char* cmd_name, uint8_t depth) const {
   if (!cmd_name) return;
-  for (uint8_t i = 0; i < _cmd_count; ++i) {
+  for (uint16_t i = 0; i < _cmd_count; ++i) {
     const Command& cmd = _commands[i];
     if (cmd._parent_idx != -1) continue; // only match top-level names
     if (!strEqual(cmd.getName(), cmd_name, _case_sensitive)) continue;
 
     _printCommandEntry(cmd, 2, depth >= 3);
     if (depth >= 2) {
-      for (uint8_t j = 0; j < _cmd_count; ++j) {
+      for (uint16_t j = 0; j < _cmd_count; ++j) {
         if (_commands[j]._parent_idx == i) {
           _printCommandEntry(_commands[j], 4, depth >= 3);
         }
@@ -451,21 +451,21 @@ bool AdvancedCLI::lastParseOk() const { return _last_parse_ok; }
 
 /* ------------------------------------------ Utility ----------------------------------------- */
 
-uint8_t AdvancedCLI::commandCount() const { return _cmd_count; }
+uint16_t AdvancedCLI::commandCount() const { return _cmd_count; }
 
-uint8_t AdvancedCLI::argCount() const { return _arg_pool_used; }
+uint16_t AdvancedCLI::argCount() const { return _arg_pool_used; }
 
 bool AdvancedCLI::isValid() const { return !_overflow; }
 
 /* --------------------------------------- Private methods -------------------------------------- */
 
-Command& AdvancedCLI::_addCommandInternal(const char* name, int8_t parent_idx) {
+Command& AdvancedCLI::_addCommandInternal(const char* name, int16_t parent_idx) {
   if (!name || _cmd_count >= Config::MAX_COMMANDS) {
     _overflow = true;
     _dummy    = Command{};
     return _dummy;
   }
-  uint8_t new_idx = _cmd_count++;
+  uint16_t new_idx = _cmd_count++;
   _commands[new_idx]._init(name, this, new_idx, parent_idx);
 
   _commands[new_idx]._arg_pool_start = _arg_pool_used;
@@ -484,7 +484,7 @@ Command* AdvancedCLI::_findCommand(const char* name, size_t name_len) {
   }
   name_buf[safe_len] = '\0';
 
-  for (uint8_t i = 0; i < _cmd_count; ++i) {
+  for (uint16_t i = 0; i < _cmd_count; ++i) {
     if (strEqual(_commands[i].getName(), name_buf, _case_sensitive)) {
       return &_commands[i];
     }
@@ -494,8 +494,8 @@ Command* AdvancedCLI::_findCommand(const char* name, size_t name_len) {
 
 Command* AdvancedCLI::_findSubCommand(const Command* parent, const char* name) {
   if (!parent || !name) return nullptr;
-  int8_t parent_idx = parent->_self_idx;
-  for (uint8_t i = 0; i < _cmd_count; ++i) {
+  int16_t parent_idx = parent->_self_idx;
+  for (uint16_t i = 0; i < _cmd_count; ++i) {
     if (_commands[i]._parent_idx == parent_idx &&
         strEqual(_commands[i].getName(), name, _case_sensitive)) {
       return &_commands[i];

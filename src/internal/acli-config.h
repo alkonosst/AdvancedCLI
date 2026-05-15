@@ -147,13 +147,13 @@ namespace ACLI {
 namespace Config {
 
 // Maximum number of commands that can be registered in a single AdvancedCLI instance.
-static constexpr uint8_t MAX_COMMANDS = ACLI_MAX_COMMANDS;
+static constexpr uint16_t MAX_COMMANDS = ACLI_MAX_COMMANDS;
 
 // Total argument slots in the shared pool, consumed one slot per add*Arg() call across all
 // registered commands. Tune this to the exact sum of arguments you actually register across all
 // commands and sub-commands.
 // Example: 3 commands with 2, 1, and 4 args respectively -> set MAX_ARGS_TOTAL = 7.
-static constexpr uint8_t MAX_ARGS_TOTAL = ACLI_MAX_ARGS_TOTAL;
+static constexpr uint16_t MAX_ARGS_TOTAL = ACLI_MAX_ARGS_TOTAL;
 
 // Maximum length (including null terminator) of a command or argument name.
 static constexpr uint8_t MAX_NAME_LEN = ACLI_MAX_NAME_LEN;
