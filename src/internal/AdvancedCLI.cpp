@@ -402,7 +402,6 @@ void AdvancedCLI::printHelp(const char* cmd_name, uint8_t depth) const {
   if (!cmd_name) return;
   for (uint16_t i = 0; i < _cmd_count; ++i) {
     const Command& cmd = _commands[i];
-    if (cmd._parent_idx != -1) continue; // only match top-level names
     if (!strEqual(cmd.getName(), cmd_name, _case_sensitive)) continue;
 
     _printCommandEntry(cmd, 2, depth >= 3);
