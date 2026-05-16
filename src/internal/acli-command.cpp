@@ -287,6 +287,8 @@ int16_t Command::_addArgInternal(const char* name, ArgType type, ArgValueType va
   // pool end, another command was registered in between. Reject to avoid overlap.
   if (_arg_pool_start + _arg_count != _owner->_arg_pool_used) return -1;
 
+  ++_owner->_arg_attempted; // count every add*Arg attempt that reaches the pool (not API errors)
+
   // Global pool overflow check.
   if (_owner->_arg_pool_used >= Config::MAX_ARGS_TOTAL) {
     _owner->_overflow = true;

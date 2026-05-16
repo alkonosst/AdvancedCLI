@@ -81,7 +81,7 @@ void setup() {
 
     if (show_all || field[0] == 'c') {
       Serial.print("Commands: ");
-      Serial.println(cli.commandCount());
+      Serial.println(cli.getCommandCount());
     }
   });
 

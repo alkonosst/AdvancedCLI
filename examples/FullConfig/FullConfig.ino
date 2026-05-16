@@ -5,7 +5,7 @@
  */
 
 /**
- * FullConfig - Demonstrates: setCaseSensitive, onUnknownCommand, parse(buf, len), commandCount
+ * FullConfig - Demonstrates: setCaseSensitive, onUnknownCommand, parse(buf, len), getCommandCount
  *
  * With case sensitivity enabled, "Version" will NOT match "version".
  * onUnknownCommand intercepts unrecognized commands before the default error output.
@@ -49,7 +49,7 @@ void setup() {
     Serial.print("[Shell] Unknown: \"");
     Serial.print(name);
     Serial.print("\"  (");
-    Serial.print(cli.commandCount());
+    Serial.print(cli.getCommandCount());
     Serial.println(" commands available - type \"diag\" for info)");
   });
 
@@ -63,7 +63,7 @@ void setup() {
 
   cli.addCommand("diag").setDescription("Runs a diagnostic check.").onExecute([](Command&) {
     Serial.print("Commands registered: ");
-    Serial.println(cli.commandCount());
+    Serial.println(cli.getCommandCount());
     Serial.println("All systems nominal.");
   });
 
@@ -87,7 +87,7 @@ void setup() {
   }
 
   Serial.print("CLI ready. ");
-  Serial.print(cli.commandCount());
+  Serial.print(cli.getCommandCount());
   Serial.println(" commands registered (case-sensitive).");
   Serial.println("> Example ready! Use the provided commands to see them in action.");
 }

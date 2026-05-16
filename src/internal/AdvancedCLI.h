@@ -163,22 +163,44 @@ class AdvancedCLI {
   /* ------------------------------------------ Utility ----------------------------------------- */
 
   /**
-   * @brief Get the number of registered top-level commands.
+   * @brief Get the number of successfully registered commands.
    *
-   * Use this together with `MAX_COMMANDS` to gauge command table utilisation during setup.
+   * Compare with `getAttemptedCommandCount()` to detect silent overflow.
    *
-   * @return `uint16_t` Number of registered commands.
+   * @return `uint16_t` Number of commands actually in the command table.
    */
-  uint16_t commandCount() const;
+  uint16_t getCommandCount() const;
 
   /**
    * @brief Get the total number of argument pool slots consumed by registered commands.
    *
-   * Use this together with `MAX_ARGS_TOTAL` to gauge pool utilisation during setup.
+   * Compare with `getAttemptedArgCount()` to detect silent overflow.
    *
    * @return `uint16_t` Number of pool slots consumed.
    */
-  uint16_t argCount() const;
+  uint16_t getArgCount() const;
+
+  /**
+   * @brief Get the total number of addCommand() / addSubCommand() calls attempted.
+   *
+   * Includes calls that were silently dropped due to table overflow. When no overflow occurred this
+   * equals `getCommandCount()`. When overflow occurred, use this value to determine the minimum
+   * `ACLI_MAX_COMMANDS` value required.
+   *
+   * @return `uint16_t` Number of command registrations attempted.
+   */
+  uint16_t getAttemptedCommandCount() const;
+
+  /**
+   * @brief Get the total number of add*Arg() calls that reached the pool-overflow check.
+   *
+   * Includes calls that were silently dropped because the argument pool was full. When no overflow
+   * occurred this equals `getArgCount()`. When overflow occurred, use this value to determine the
+   * minimum `ACLI_MAX_ARGS_TOTAL` value required.
+   *
+   * @return `uint16_t` Number of argument registrations attempted against the pool.
+   */
+  uint16_t getAttemptedArgCount() const;
 
   /**
    * @brief Verify that no registration overflow has occurred.
@@ -186,6 +208,9 @@ class AdvancedCLI {
    * Returns `false` if any `addCommand()` or `addSubCommand()` call was silently dropped because
    * the command table (`MAX_COMMANDS`) was full, or a command could not receive argument capacity
    * because the pool (`MAX_ARGS_TOTAL`) was exhausted.
+   *
+   * When `false` is returned, call `getAttemptedCommandCount()` and `getAttemptedArgCount()` to
+   * determine the minimum macro values required.
    *
    * Call this once at the end of `setup()` to confirm that all registrations succeeded.
    *
@@ -196,12 +221,14 @@ class AdvancedCLI {
   private:
   Command _commands[Config::MAX_COMMANDS] = {};
   uint16_t _cmd_count                     = 0;
+  uint16_t _cmd_attempted = 0; // counts all addCommand/addSubCommand calls, including overflow
 
   // Argument pool: all ArgDef and ParsedArg instances live here.
   // Each add*Arg() call consumes exactly one slot.
   detail::ArgDef _arg_def_pool[Config::MAX_ARGS_TOTAL]   = {};
   detail::ParsedArg _parsed_pool[Config::MAX_ARGS_TOTAL] = {};
   uint16_t _arg_pool_used                                = 0;
+  uint16_t _arg_attempted = 0; // counts add*Arg calls that passed contiguity/sealed checks
 
   bool _overflow       = false; // true when MAX_COMMANDS or MAX_ARGS_TOTAL is exceeded
   bool _case_sensitive = false;

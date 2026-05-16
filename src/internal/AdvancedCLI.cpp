@@ -461,20 +461,33 @@ bool AdvancedCLI::lastParseOk() const { return _last_parse_ok; }
 
 /* ------------------------------------------ Utility ----------------------------------------- */
 
-uint16_t AdvancedCLI::commandCount() const { return _cmd_count; }
+uint16_t AdvancedCLI::getCommandCount() const { return _cmd_count; }
 
-uint16_t AdvancedCLI::argCount() const { return _arg_pool_used; }
+uint16_t AdvancedCLI::getArgCount() const { return _arg_pool_used; }
 
 bool AdvancedCLI::isValid() const { return !_overflow; }
+
+uint16_t AdvancedCLI::getAttemptedCommandCount() const { return _cmd_attempted; }
+
+uint16_t AdvancedCLI::getAttemptedArgCount() const { return _arg_attempted; }
 
 /* --------------------------------------- Private methods -------------------------------------- */
 
 Command& AdvancedCLI::_addCommandInternal(const char* name, int16_t parent_idx) {
-  if (!name || _cmd_count >= Config::MAX_COMMANDS) {
+  if (!name) {
     _overflow = true;
     _dummy    = Command{};
     return _dummy;
   }
+
+  ++_cmd_attempted; // Increment attempted count before overflow check to include all calls
+
+  if (_cmd_count >= Config::MAX_COMMANDS) {
+    _overflow = true;
+    _dummy    = Command{};
+    return _dummy;
+  }
+
   uint16_t new_idx = _cmd_count++;
   _commands[new_idx]._init(name, this, new_idx, parent_idx);
 
