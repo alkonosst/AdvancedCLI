@@ -422,8 +422,14 @@ cli.printHelp();           // Full output: commands, sub-commands, and arguments
 cli.printHelp(1);          // Commands only
 cli.printHelp(2);          // Commands and sub-commands
 cli.printHelp(3);          // Commands, sub-commands, and arguments (same as no argument)
-cli.printHelp("wifi");     // Full output for a single named command
-cli.printHelp("wifi", 2);  // Single command, commands and sub-commands only
+cli.printHelp("wifi");     // Full output for the first command named "wifi"
+cli.printHelp("wifi", 2);  // Single named command, commands and sub-commands only
+
+// Unambiguous per-instance help (see note below)
+cli.printHelp(wifi_ctrl);       // Full output for a specific Command instance
+cli.printHelp(wifi_ctrl, 2);    // Same, depth 2
+wifi_ctrl.printHelp();          // Same, called directly on the Command instance
+wifi_ctrl.printHelp(2);         // Same with depth control
 ```
 
 The `depth` parameter controls how much is printed:
@@ -433,6 +439,26 @@ The `depth` parameter controls how much is printed:
 | `1`   | Command names and descriptions only       |
 | `2`   | Commands and their sub-commands           |
 | `3`   | Commands, sub-commands, and all arguments |
+
+> [!NOTE]
+> `AdvancedCLI::printHelp(const char* name)` matches the **first** registered command with that name. When
+> multiple commands share the same sub-command name (e.g. `modem control` and `system control`),
+> use `AdvancedCLI::printHelp(const Command& cmd)` or `Command::printHelp()` to target a specific instance
+> unambiguously. These overloads are especially useful inside execution callbacks, where the
+> `Command&` parameter already refers to the exact instance being executed:
+>
+> ```cpp
+> Command& modem_ctrl = modem.addSubCommand("control");
+> Command& system_ctrl  = system.addSubCommand("control");
+>
+> // Outside a callback - unambiguous because we hold the exact reference:
+> cli.printHelp(modem_ctrl);
+> cli.printHelp(system_ctrl);
+>
+> // Inside a callback - the Command& parameter is already the exact instance:
+> modem_ctrl.onExecute([](Command& cmd) { cmd.printHelp(); });
+> system_ctrl.onExecute([](Command& cmd)  { cmd.printHelp(); });
+> ```
 
 A `help` command that accepts an optional target and depth:
 

@@ -203,6 +203,20 @@ uint16_t Command::getParsedArgCount() const {
   return count;
 }
 
+/* ------------------------------------------- Help ------------------------------------------- */
+
+void Command::printHelp(uint8_t depth) const {
+  if (!_owner) return;
+  _owner->_printCommandEntry(*this, 2, depth >= 3);
+  if (depth >= 2) {
+    for (uint16_t j = 0; j < _owner->_cmd_count; ++j) {
+      if (_owner->_commands[j]._parent_idx == _self_idx) {
+        _owner->_printCommandEntry(_owner->_commands[j], 4, depth >= 3);
+      }
+    }
+  }
+}
+
 /* --------------------------------------- Private methods -------------------------------------- */
 
 void Command::_init(const char* name, AdvancedCLI* owner, int16_t self_idx, int16_t parent_idx) {
