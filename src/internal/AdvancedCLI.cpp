@@ -416,6 +416,17 @@ void AdvancedCLI::printHelp(const char* cmd_name, uint8_t depth) const {
   }
 }
 
+void AdvancedCLI::printHelp(const Command& cmd, uint8_t depth) const {
+  _printCommandEntry(cmd, 2, depth >= 3);
+  if (depth >= 2) {
+    for (uint16_t j = 0; j < _cmd_count; ++j) {
+      if (_commands[j]._parent_idx == cmd._self_idx) {
+        _printCommandEntry(_commands[j], 4, depth >= 3);
+      }
+    }
+  }
+}
+
 /* ----------------------------------- Inject (unit-testing) ---------------------------------- */
 
 bool AdvancedCLI::inject(const char* input) {

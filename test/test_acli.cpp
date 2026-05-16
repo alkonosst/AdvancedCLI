@@ -27,6 +27,7 @@
  * - Multiple args in one command
  * - "--" positional separator
  * - printHelp(cmd_name)
+ * - printHelp(const Command&) and Command::printHelp()
  * - Duplicate arg name detection
  * - Persistent arguments (addPersistentIntArg / addPersistentFlag / getArgByName fallback)
  */
@@ -1308,6 +1309,185 @@ static void test_persistent_arg_registered_after_subcommand_fails() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
+/*                       printHelp(const Command&) and Command::printHelp()                       */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_printHelp_by_ref_prints_specific_command() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& wifi = cli.addCommand("wifi").setDescription("WiFi commands");
+  cli.addCommand("led").setDescription("LED control");
+
+  cli.printHelp(wifi);
+
+  // "wifi" appears; "led" does not
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "led"));
+}
+
+static void test_printHelp_by_ref_disambiguates_same_name_subcommands() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& battery  = cli.addCommand("battery");
+  Command& batt_ctl = battery.addSubCommand("control").setDescription("Battery control");
+
+  Command& system  = cli.addCommand("system");
+  Command& sys_ctl = system.addSubCommand("control").setDescription("System control");
+
+  // Print only battery's "control" - should show "Battery control", not "System control"
+  cli.printHelp(batt_ctl);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Battery control"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "System control"));
+
+  cap.clear();
+
+  // Print only system's "control" - should show "System control", not "Battery control"
+  cli.printHelp(sys_ctl);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "System control"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "Battery control"));
+}
+
+static void test_printHelp_by_ref_excludes_sibling_commands() {
+  // Printing a top-level command by ref must not include siblings
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& wifi = cli.addCommand("wifi").setDescription("WiFi commands");
+  cli.addCommand("ble").setDescription("BLE commands");
+
+  cli.printHelp(wifi);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "ble"));
+}
+
+static void test_printHelp_by_ref_depth_control() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& wifi = cli.addCommand("wifi");
+  wifi.addIntArg("channel");
+  wifi.addSubCommand("scan").setDescription("Scan networks");
+
+  // depth=1: command name only - no sub-commands, no args
+  cli.printHelp(wifi, 1);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "scan"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "channel"));
+
+  cap.clear();
+
+  // depth=2: command + sub-commands, no args
+  cli.printHelp(wifi, 2);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "scan"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "channel"));
+
+  cap.clear();
+
+  // depth=3 (default): everything
+  cli.printHelp(wifi);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "scan"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "channel"));
+}
+
+static void test_command_printHelp_prints_own_command() {
+  // Command::printHelp() called directly (outside a callback) prints only that command
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& wifi = cli.addCommand("wifi").setDescription("WiFi commands");
+  cli.addCommand("led").setDescription("LED control");
+
+  wifi.printHelp();
+
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "led"));
+}
+
+static void test_command_printHelp_inside_callback() {
+  // Command::printHelp() called from inside a callback prints only that command
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& wifi = cli.addCommand("wifi").setDescription("WiFi commands");
+  cli.addCommand("led").setDescription("LED control");
+  wifi.onExecute([](Command& cmd) { cmd.printHelp(); });
+
+  cli.inject("wifi");
+
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "led"));
+}
+
+static void test_command_printHelp_disambiguates_from_callback() {
+  // The core use-case: two sub-commands share the name "control" under different parents.
+  // printHelp("control") always finds the first one registered; cmd.printHelp() inside the
+  // callback is unambiguous because it operates on the exact instance being executed.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& battery = cli.addCommand("battery");
+  battery.addSubCommand("control").setDescription("Battery control").onExecute([](Command& cmd) {
+    cmd.printHelp();
+  });
+
+  Command& system = cli.addCommand("system");
+  system.addSubCommand("control").setDescription("System control").onExecute([](Command& cmd) {
+    cmd.printHelp();
+  });
+
+  // Invoke battery's control
+  cli.inject("battery control");
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Battery control"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "System control"));
+
+  cap.clear();
+
+  // Invoke system's control
+  cli.inject("system control");
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "System control"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "Battery control"));
+}
+
+static void test_command_printHelp_depth_control() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& wifi = cli.addCommand("wifi");
+  wifi.addIntArg("channel");
+  wifi.addSubCommand("scan").setDescription("Scan networks");
+
+  // depth=1
+  wifi.printHelp(1);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "scan"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "channel"));
+
+  cap.clear();
+
+  // depth=2
+  wifi.printHelp(2);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "scan"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "channel"));
+
+  cap.clear();
+
+  // depth=3 (default)
+  wifi.printHelp();
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "scan"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "channel"));
+}
+
+/* ---------------------------------------------------------------------------------------------- */
 /*                                          setup / loop                                          */
 /* ---------------------------------------------------------------------------------------------- */
 
@@ -1451,6 +1631,16 @@ void setup() {
   RUN_TEST(test_persistent_arg_parent_standalone_still_works);
   RUN_TEST(test_persistent_arg_argCount_includes_persistent);
   RUN_TEST(test_persistent_arg_registered_after_subcommand_fails);
+
+  // printHelp(const Command&) and Command::printHelp()
+  RUN_TEST(test_printHelp_by_ref_prints_specific_command);
+  RUN_TEST(test_printHelp_by_ref_disambiguates_same_name_subcommands);
+  RUN_TEST(test_printHelp_by_ref_excludes_sibling_commands);
+  RUN_TEST(test_printHelp_by_ref_depth_control);
+  RUN_TEST(test_command_printHelp_prints_own_command);
+  RUN_TEST(test_command_printHelp_inside_callback);
+  RUN_TEST(test_command_printHelp_disambiguates_from_callback);
+  RUN_TEST(test_command_printHelp_depth_control);
 
   UNITY_END();
 }

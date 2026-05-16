@@ -110,6 +110,18 @@ class AdvancedCLI {
    */
   void printHelp(const char* cmd_name, uint8_t depth = 3) const;
 
+  /**
+   * @brief Print the help entry for a specific `Command` instance (and its sub-commands).
+   *
+   * Unlike `printHelp(const char*)`, this overload is unambiguous when multiple commands share the
+   * same name (e.g. two "control" sub-commands under different parents). Pass the `Command&`
+   * reference returned by `addCommand()` or `addSubCommand()` at registration time.
+   *
+   * @param cmd Command instance to print.
+   * @param depth Detail level (1-3). See `printHelp(uint8_t)` for depth semantics.
+   */
+  void printHelp(const Command& cmd, uint8_t depth = 3) const;
+
   /* ----------------------------------- Inject (unit-testing) ---------------------------------- */
 
   /**

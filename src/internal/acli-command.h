@@ -275,6 +275,21 @@ class Command {
    */
   uint16_t getParsedArgCount() const;
 
+  /* ------------------------------------------- Help ------------------------------------------- */
+
+  /**
+   * @brief Print the help entry for this command (and its sub-commands) to the configured output
+   * sink.
+   *
+   * Because this method operates on the exact `Command` instance, it is unambiguous even when
+   * multiple commands share the same name (e.g. two "control" sub-commands under different
+   * parents). Useful inside execution callbacks where the `Command&` parameter already refers to
+   * the specific command being executed.
+   *
+   * @param depth Detail level (1-3). See `AdvancedCLI::printHelp(uint8_t)` for depth semantics.
+   */
+  void printHelp(uint8_t depth = 3) const;
+
   private:
   const char* _name        = nullptr; // zero-copy: points to registration-time string literal
   const char* _description = nullptr; // zero-copy: points to user-supplied string literal
