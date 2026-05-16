@@ -449,7 +449,7 @@ The `depth` parameter controls how much is printed:
 > `Command&` parameter already refers to the exact instance being executed:
 >
 > ```cpp
-> Command& modem_ctrl = modem.addSubCommand("control");
+> Command& modem_ctrl   = modem.addSubCommand("control");
 > Command& system_ctrl  = system.addSubCommand("control");
 >
 > // Outside a callback - unambiguous because we hold the exact reference:
@@ -467,10 +467,11 @@ A `help` command that accepts an optional target and depth:
 static ArgStr help_target;
 static ArgInt help_depth;
 
-Command& help_cmd = cli.addCommand("help");
-help_cmd.setDescription("Prints available commands.");
+Command& help_cmd = cli.addCommand("help").setDescription("Prints available commands.");
+
 help_target = help_cmd.addPosArg("command").setDescription("Command name (optional).");
 help_depth  = help_cmd.addIntArg("depth", 3).setDescription("Detail level: 1=cmds, 2=+sub, 3=full.");
+
 help_cmd.onExecute([](Command& cmd) {
   ParsedStr target = cmd.getArg(help_target);
   ParsedInt depth  = cmd.getArg(help_depth);
