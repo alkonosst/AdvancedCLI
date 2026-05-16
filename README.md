@@ -52,6 +52,7 @@
   - [Error Handling](#error-handling)
   - [Validation And Invalid Callbacks](#validation-and-invalid-callbacks)
   - [Configuration Macros](#configuration-macros)
+  - [Capacity Diagnostics](#capacity-diagnostics)
   - [Platform Notes](#platform-notes)
 - [Release Status](#release-status)
 - [License](#license)
@@ -590,6 +591,34 @@ build_flags =
   -D ACLI_MAX_ARGS_TOTAL=64       ; allow more total arguments across all commands
   -D ACLI_ENABLE_VALIDATION_FN=1  ; enable argument validators (disabled by default on AVR to save RAM)
 ```
+
+## Capacity Diagnostics
+
+Call these utility methods at the end of `setup()` to verify that all registrations fit within the configured limits:
+
+| Method                       | Returns                                                            |
+| ---------------------------- | ------------------------------------------------------------------ |
+| `getCommandCount()`          | Commands successfully registered in the command table              |
+| `getArgCount()`              | Argument pool slots consumed by registered commands                |
+| `getAttemptedCommandCount()` | Total `addCommand()` / `addSubCommand()` calls, including overflow |
+| `getAttemptedArgCount()`     | Total `add*Arg()` calls that reached the pool, including overflow  |
+| `isValid()`                  | `true` if no overflow occurred                                     |
+
+When `isValid()` returns `false`, use the _attempted_ counts to determine the minimum macro values you need:
+
+```cpp
+void setup() {
+  // ... register commands and args ...
+
+  if (!cli.isValid()) {
+    Serial.println("[CLI] Registration overflow!");
+    Serial.printf("[CLI] Need ACLI_MAX_COMMANDS   >= %u\n", cli.getAttemptedCommandCount());
+    Serial.printf("[CLI] Need ACLI_MAX_ARGS_TOTAL >= %u\n", cli.getAttemptedArgCount());
+  }
+}
+```
+
+When no overflow occurs, `getAttemptedCommandCount()` equals `getCommandCount()` and `getAttemptedArgCount()` equals `getArgCount()`.
 
 ## Platform Notes
 

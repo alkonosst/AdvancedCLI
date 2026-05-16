@@ -21,7 +21,9 @@
  * - cmd.fail()
  * - getArgByName()
  * - lastParseOk()
- * - commandCount()
+ * - getCommandCount()
+ * - getArgCount()
+ * - getAttemptedCommandCount() / getAttemptedArgCount()
  * - Unknown command + onUnknownCommand callback
  * - onInvalid() per-argument callback
  * - Multiple args in one command
@@ -85,43 +87,43 @@ static void test_unknown_command_returns_false() {
   TEST_ASSERT_FALSE(cli.inject("pong"));
 }
 
-static void test_commandCount() {
+static void test_getCommandCount() {
   AdvancedCLI cli;
-  TEST_ASSERT_EQUAL(0, cli.commandCount());
+  TEST_ASSERT_EQUAL(0, cli.getCommandCount());
   cli.addCommand("a");
   cli.addCommand("b");
-  TEST_ASSERT_EQUAL(2, cli.commandCount());
+  TEST_ASSERT_EQUAL(2, cli.getCommandCount());
 }
 
 /* ---------------------------------------------------------------------------------------------- */
-/*                                          argCount()                                            */
+/*                                          getArgCount() */
 /* ---------------------------------------------------------------------------------------------- */
 
-static void test_argCount_zero_with_no_commands() {
+static void test_getArgCount_zero_with_no_commands() {
   AdvancedCLI cli;
-  TEST_ASSERT_EQUAL(0, cli.argCount());
+  TEST_ASSERT_EQUAL(0, cli.getArgCount());
 }
 
-static void test_argCount_increments_per_command() {
+static void test_getArgCount_increments_per_command() {
   AdvancedCLI cli;
-  // argCount() returns the number of actual argument registrations, not reserved slots.
+  // getArgCount() returns the number of actual argument registrations, not reserved slots.
   auto& a = cli.addCommand("a");
   a.addArg("x"); // 1 slot
   auto& b = cli.addCommand("b");
   b.addIntArg("y"); // 1 slot
   b.addIntArg("z"); // 1 slot
-  TEST_ASSERT_EQUAL(3, cli.argCount());
+  TEST_ASSERT_EQUAL(3, cli.getArgCount());
 }
 
-static void test_argCount_includes_subcommands() {
+static void test_getArgCount_includes_subcommands() {
   AdvancedCLI cli;
-  // argCount() reflects actual addArg() calls across parent and child commands.
+  // getArgCount() reflects actual addArg() calls across parent and child commands.
   auto& parent = cli.addCommand("parent");
   parent.addArg("p1"); // 1 slot
   auto& child = parent.addSubCommand("child");
   child.addArg("c1");    // 1 slot
   child.addIntArg("c2"); // 1 slot
-  TEST_ASSERT_EQUAL(3, cli.argCount());
+  TEST_ASSERT_EQUAL(3, cli.getArgCount());
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -171,11 +173,66 @@ static void test_isValid_false_on_args_overflow() {
     names[i][3] = '\0';
     cmd.addIntArg(names[i]);
   }
-  TEST_ASSERT_EQUAL(Config::MAX_ARGS_TOTAL, cli.argCount());
+  TEST_ASSERT_EQUAL(Config::MAX_ARGS_TOTAL, cli.getArgCount());
 
   // One more arg must trigger overflow.
   cmd.addIntArg("boom");
   TEST_ASSERT_FALSE(cli.isValid());
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                          getAttemptedCommandCount() / getAttemptedArgCount()                   */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_getAttemptedCommandCount_no_overflow() {
+  // When no overflow occurs, attempted equals registered.
+  AdvancedCLI cli;
+  cli.addCommand("a");
+  cli.addCommand("b");
+  TEST_ASSERT_EQUAL(2, cli.getAttemptedCommandCount());
+  TEST_ASSERT_EQUAL(cli.getCommandCount(), cli.getAttemptedCommandCount());
+}
+
+static void test_getAttemptedCommandCount_overflow() {
+  // When overflow occurs, attempted exceeds registered by the number of dropped calls.
+  AdvancedCLI cli;
+  char name[4] = "c0";
+  for (uint8_t i = 0; i < Config::MAX_COMMANDS; ++i) {
+    name[1] = static_cast<char>('0' + (i % 10));
+    name[2] = static_cast<char>('0' + (i / 10));
+    name[3] = '\0';
+    cli.addCommand(name);
+  }
+  cli.addCommand("overflow"); // one extra
+  TEST_ASSERT_EQUAL(Config::MAX_COMMANDS, cli.getCommandCount());
+  TEST_ASSERT_EQUAL(Config::MAX_COMMANDS + 1, cli.getAttemptedCommandCount());
+}
+
+static void test_getAttemptedArgCount_no_overflow() {
+  // When no overflow occurs, attempted equals registered.
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("cmd");
+  cmd.addArg("a");
+  cmd.addArg("b");
+  TEST_ASSERT_EQUAL(2, cli.getAttemptedArgCount());
+  TEST_ASSERT_EQUAL(cli.getArgCount(), cli.getAttemptedArgCount());
+}
+
+static void test_getAttemptedArgCount_overflow() {
+  // When overflow occurs, attempted exceeds registered by the number of dropped calls.
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("fill");
+
+  char names[Config::MAX_ARGS_TOTAL + 1][4] = {};
+  for (uint16_t i = 0; i <= Config::MAX_ARGS_TOTAL; ++i) {
+    names[i][0] = 'a';
+    names[i][1] = static_cast<char>('0' + (i % 10));
+    names[i][2] = static_cast<char>('0' + (i / 10));
+    names[i][3] = '\0';
+    cmd.addIntArg(names[i]);
+  }
+  TEST_ASSERT_EQUAL(Config::MAX_ARGS_TOTAL, cli.getArgCount());
+  TEST_ASSERT_EQUAL(Config::MAX_ARGS_TOTAL + 1, cli.getAttemptedArgCount());
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -1293,7 +1350,7 @@ static void test_persistent_arg_argCount_includes_persistent() {
   Command& joy = cli.addCommand("joy");
   joy.addPersistentIntArg("n");
   joy.addSubCommand("cal").addIntArg("x");
-  TEST_ASSERT_EQUAL(2, cli.argCount()); // 1 persistent + 1 sub-cmd arg
+  TEST_ASSERT_EQUAL(2, cli.getArgCount()); // 1 persistent + 1 sub-cmd arg
 }
 
 static void test_persistent_arg_registered_after_subcommand_fails() {
@@ -1500,18 +1557,24 @@ void setup() {
   // Basic dispatch
   RUN_TEST(test_basic_dispatch);
   RUN_TEST(test_unknown_command_returns_false);
-  RUN_TEST(test_commandCount);
+  RUN_TEST(test_getCommandCount);
 
-  // argCount()
-  RUN_TEST(test_argCount_zero_with_no_commands);
-  RUN_TEST(test_argCount_increments_per_command);
-  RUN_TEST(test_argCount_includes_subcommands);
+  // getArgCount()
+  RUN_TEST(test_getArgCount_zero_with_no_commands);
+  RUN_TEST(test_getArgCount_increments_per_command);
+  RUN_TEST(test_getArgCount_includes_subcommands);
 
   // isValid()
   RUN_TEST(test_isValid_true_on_empty_cli);
   RUN_TEST(test_isValid_true_after_normal_registration);
   RUN_TEST(test_isValid_false_on_command_overflow);
   RUN_TEST(test_isValid_false_on_args_overflow);
+
+  // getAttemptedCommandCount() / getAttemptedArgCount()
+  RUN_TEST(test_getAttemptedCommandCount_no_overflow);
+  RUN_TEST(test_getAttemptedCommandCount_overflow);
+  RUN_TEST(test_getAttemptedArgCount_no_overflow);
+  RUN_TEST(test_getAttemptedArgCount_overflow);
 
   // Named string arg
   RUN_TEST(test_named_string_arg_provided);
