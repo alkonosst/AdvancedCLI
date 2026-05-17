@@ -483,8 +483,10 @@ Command& AdvancedCLI::_addCommandInternal(const char* name, int16_t parent_idx) 
   ++_cmd_attempted; // Increment attempted count before overflow check to include all calls
 
   if (_cmd_count >= Config::MAX_COMMANDS) {
-    _overflow = true;
-    _dummy    = Command{};
+    _overflow        = true;
+    _dummy           = Command{}; // reset all state
+    _dummy._owner    = this;      // keep owner so add*() calls on the dummy can still reach us
+    _dummy._self_idx = -1;        // sentinel: this slot overflowed; count but don't write to pool
     return _dummy;
   }
 

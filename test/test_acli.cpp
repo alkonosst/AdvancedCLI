@@ -235,6 +235,37 @@ static void test_getAttemptedArgCount_overflow() {
   TEST_ASSERT_EQUAL(Config::MAX_ARGS_TOTAL + 1, cli.getAttemptedArgCount());
 }
 
+static void test_getAttemptedCommandCount_subcommand_of_overflow() {
+  // Sub-commands added onto an overflowed (dummy) parent must still be counted.
+  AdvancedCLI cli;
+  char name[4] = "c0";
+  for (uint8_t i = 0; i < Config::MAX_COMMANDS; ++i) {
+    name[1] = static_cast<char>('0' + (i % 10));
+    name[2] = static_cast<char>('0' + (i / 10));
+    name[3] = '\0';
+    cli.addCommand(name);
+  }
+  auto& overflow = cli.addCommand("overflow"); // attempt MAX_COMMANDS + 1
+  overflow.addSubCommand("child");             // attempt MAX_COMMANDS + 2
+  TEST_ASSERT_EQUAL(Config::MAX_COMMANDS + 2, cli.getAttemptedCommandCount());
+}
+
+static void test_getAttemptedArgCount_arg_on_overflow_command() {
+  // Args added onto an overflowed (dummy) command must still be counted.
+  AdvancedCLI cli;
+  char name[4] = "c0";
+  for (uint8_t i = 0; i < Config::MAX_COMMANDS; ++i) {
+    name[1] = static_cast<char>('0' + (i % 10));
+    name[2] = static_cast<char>('0' + (i / 10));
+    name[3] = '\0';
+    cli.addCommand(name);
+  }
+  auto& overflow = cli.addCommand("overflow"); // command overflows
+  overflow.addArg("a");                        // must be counted despite command overflow
+  overflow.addArg("b");                        // same
+  TEST_ASSERT_EQUAL(2, cli.getAttemptedArgCount());
+}
+
 /* ---------------------------------------------------------------------------------------------- */
 /*                                      Named string argument                                     */
 /* ---------------------------------------------------------------------------------------------- */
@@ -1573,8 +1604,10 @@ void setup() {
   // getAttemptedCommandCount() / getAttemptedArgCount()
   RUN_TEST(test_getAttemptedCommandCount_no_overflow);
   RUN_TEST(test_getAttemptedCommandCount_overflow);
+  RUN_TEST(test_getAttemptedCommandCount_subcommand_of_overflow);
   RUN_TEST(test_getAttemptedArgCount_no_overflow);
   RUN_TEST(test_getAttemptedArgCount_overflow);
+  RUN_TEST(test_getAttemptedArgCount_arg_on_overflow_command);
 
   // Named string arg
   RUN_TEST(test_named_string_arg_provided);

@@ -282,6 +282,13 @@ int16_t Command::_addArgInternal(const char* name, ArgType type, ArgValueType va
     return -1;
   }
 
+  // If this command slot itself overflowed (_self_idx == -1 sentinel set by _addCommandInternal),
+  // count the attempt but don't touch the pool - _arg_defs is null and pool state must not change.
+  if (_self_idx < 0) {
+    ++_owner->_arg_attempted;
+    return -1;
+  }
+
   // Contiguity guard: all args for this command must be registered before any sibling or child
   // command is registered. If this command's "tail" in the pool no longer aligns with the current
   // pool end, another command was registered in between. Reject to avoid overlap.
