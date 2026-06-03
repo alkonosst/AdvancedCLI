@@ -43,6 +43,7 @@
     - [Named Arguments](#named-arguments)
     - [Flags](#flags)
     - [Positional Arguments](#positional-arguments)
+  - [Quoting and Escaping](#quoting-and-escaping)
   - [Reading Parsed Values](#reading-parsed-values)
     - [getParsedArgCount()](#getparsedargcount)
   - [Sub-commands](#sub-commands)
@@ -283,6 +284,35 @@ Sending `add 3 -5` prints `-2`. Negative numbers (e.g. `-5`) are correctly disti
 
 > [!NOTE]
 > Use `--` to force all subsequent tokens to be treated as positional values, even if they start with `-`. For example: `cmd -- -this-is-a-value`.
+
+## Quoting and Escaping
+
+By default, a token ends at the first whitespace character. To pass a value that contains spaces or special characters, wrap it in quotes.
+
+**Double quotes** (`"..."`) - value may contain spaces and escape sequences:
+
+```
+echo -msg "hello world"
+```
+
+**Single quotes** (`'...'`) - use when the value itself contains double quotes (e.g. JSON):
+
+```
+config -data '{"key": "value", "num": 42}'
+```
+
+Both quote styles support the same escape sequences inside:
+
+| Sequence | Result  |
+| -------- | ------- |
+| `\"`     | `"`     |
+| `\'`     | `'`     |
+| `\\`     | `\`     |
+| `\n`     | newline |
+| `\t`     | tab     |
+
+> [!NOTE]
+> A quoted token that contains double quotes **cannot** use double quotes as the outer delimiter without escaping them. The equivalent of `'{"key":"value"}'` using double quotes is `"{\"key\":\"value\"}"`. Single quotes are simpler in that case.
 
 ## Reading Parsed Values
 

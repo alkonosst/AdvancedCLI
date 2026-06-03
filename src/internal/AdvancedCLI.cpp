@@ -543,9 +543,11 @@ uint8_t AdvancedCLI::_tokenize(const char* input, size_t input_len,
     uint8_t token_idx = 0;
     char* token_buf   = tokens[token_count];
     bool quoted       = false;
+    char quote_char   = '\0';
 
-    if (input[i] == '"') {
-      quoted = true;
+    if (input[i] == '"' || input[i] == '\'') {
+      quoted     = true;
+      quote_char = input[i];
       ++i; // skip opening quote
     }
 
@@ -559,6 +561,8 @@ uint8_t AdvancedCLI::_tokenize(const char* input, size_t input_len,
           char escape_char = input[i];
           if (escape_char == '"')
             current_char = '"';
+          else if (escape_char == '\'')
+            current_char = '\'';
           else if (escape_char == '\\')
             current_char = '\\';
           else if (escape_char == 'n')
@@ -567,7 +571,7 @@ uint8_t AdvancedCLI::_tokenize(const char* input, size_t input_len,
             current_char = '\t';
           else
             current_char = escape_char;
-        } else if (current_char == '"') {
+        } else if (current_char == quote_char) {
           ++i; // skip closing quote
           break;
         }
