@@ -318,6 +318,50 @@ static void test_named_string_arg_no_default_returns_empty() {
   TEST_ASSERT_EQUAL_STRING("", received);
 }
 
+static void test_named_string_arg_json_with_quotes() {
+  AdvancedCLI cli;
+  ArgStr h;
+  const char* received = nullptr;
+
+  auto& cmd = cli.addCommand("cmd");
+  h         = cmd.addArg("val");
+  cmd.onExecute([&](Command& c) {
+    auto a   = c.getArg(h);
+    received = a.getValue();
+  });
+
+  // Using quotes around the JSON value allows it to be parsed as a single argument without needing
+  // to escape inner spaces.
+  TEST_ASSERT_TRUE(cli.inject(R"(cmd --val '{"key": "value","num": 42}')"));
+  TEST_ASSERT_EQUAL_STRING(R"({"key": "value","num": 42})", received);
+
+  // Even without spaces, quotes should still work and be stripped from the value.
+  TEST_ASSERT_TRUE(cli.inject(R"(cmd --val '{"key":"value","num":42}')"));
+  TEST_ASSERT_EQUAL_STRING(R"({"key":"value","num":42})", received);
+}
+
+static void test_named_string_arg_json_without_quotes() {
+  AdvancedCLI cli;
+  ArgStr h;
+  const char* received = nullptr;
+
+  auto& cmd = cli.addCommand("cmd");
+  h         = cmd.addArg("val");
+  cmd.onExecute([&](Command& c) {
+    auto a   = c.getArg(h);
+    received = a.getValue();
+  });
+
+  // If the JSON value has no spaces, it should be parsed correctly even without quotes.
+  TEST_ASSERT_TRUE(cli.inject(R"(cmd --val {"key":"value","num":42})"));
+  TEST_ASSERT_EQUAL_STRING(R"({"key":"value","num":42})", received);
+
+  // However, if there are spaces, the value will be truncated at the first space since it's not
+  // quoted.
+  TEST_ASSERT_FALSE(cli.inject(R"(cmd --val {"key": "value","num": 42})"));
+  TEST_ASSERT_EQUAL_STRING(R"({"key":)", received);
+}
+
 /* ---------------------------------------------------------------------------------------------- */
 /*                                          Flag argument                                         */
 /* ---------------------------------------------------------------------------------------------- */
@@ -1613,6 +1657,8 @@ void setup() {
   RUN_TEST(test_named_string_arg_provided);
   RUN_TEST(test_named_string_arg_default);
   RUN_TEST(test_named_string_arg_no_default_returns_empty);
+  RUN_TEST(test_named_string_arg_json_with_quotes);
+  RUN_TEST(test_named_string_arg_json_without_quotes);
 
   // Flag arg
   RUN_TEST(test_flag_present);
