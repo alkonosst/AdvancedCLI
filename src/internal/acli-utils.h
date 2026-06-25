@@ -20,8 +20,8 @@ namespace detail {
 inline bool strEqualCI(const char* a, const char* b) {
   if (!a || !b) return false;
   while (*a && *b) {
-    char ca = (*a >= 'A' && *a <= 'Z') ? (char)(*a + 32) : *a;
-    char cb = (*b >= 'A' && *b <= 'Z') ? (char)(*b + 32) : *b;
+    char ca = (*a >= 'A' && *a <= 'Z') ? static_cast<char>(*a + 32) : *a;
+    char cb = (*b >= 'A' && *b <= 'Z') ? static_cast<char>(*b + 32) : *b;
     if (ca != cb) return false;
     ++a;
     ++b;

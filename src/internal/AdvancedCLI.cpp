@@ -616,18 +616,18 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
     // Interleave parent persistent args between parent name and sub-command name
     for (uint8_t i = 0; i < parent._arg_count; ++i) {
       const ArgDef& d = parent._arg_defs[i];
-      if (!d.is_persistent || write_pos >= (int)buf_size - 1) continue;
+      if (!d.is_persistent || write_pos >= static_cast<int>(buf_size) - 1) continue;
       bool is_opt = !d.is_required;
       switch (d.type) {
         case ArgType::Flag:
           write_pos += snprintf(buf + write_pos,
-            buf_size - (size_t)write_pos,
+            buf_size - static_cast<size_t>(write_pos),
             is_opt ? " [-%s]" : " -%s",
             d.name);
           break;
         case ArgType::Named:
           write_pos += snprintf(buf + write_pos,
-            buf_size - (size_t)write_pos,
+            buf_size - static_cast<size_t>(write_pos),
             is_opt ? " [-%s <%s>]" : " -%s <%s>",
             d.name,
             d.name);
@@ -635,7 +635,8 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
         default: break;
       }
     }
-    write_pos += snprintf(buf + write_pos, buf_size - (size_t)write_pos, " %s", cmd.getName());
+    write_pos +=
+      snprintf(buf + write_pos, buf_size - static_cast<size_t>(write_pos), " %s", cmd.getName());
   } else {
     write_pos = snprintf(buf, buf_size, "%s", cmd.getName());
   }
@@ -644,19 +645,19 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
     const ArgDef& arg_def = cmd._arg_defs[i];
     bool is_optional      = !arg_def.is_required;
 
-    if (write_pos >= (int)buf_size - 1) break;
+    if (write_pos >= static_cast<int>(buf_size) - 1) break;
 
     switch (arg_def.type) {
       case ArgType::Flag:
         write_pos += snprintf(buf + write_pos,
-          buf_size - (size_t)write_pos,
+          buf_size - static_cast<size_t>(write_pos),
           is_optional ? " [-%s]" : " -%s",
           arg_def.name);
         break;
 
       case ArgType::Named:
         write_pos += snprintf(buf + write_pos,
-          buf_size - (size_t)write_pos,
+          buf_size - static_cast<size_t>(write_pos),
           is_optional ? " [-%s <%s>]" : " -%s <%s>",
           arg_def.name,
           arg_def.name);
@@ -664,7 +665,7 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
 
       case ArgType::Positional:
         write_pos += snprintf(buf + write_pos,
-          buf_size - (size_t)write_pos,
+          buf_size - static_cast<size_t>(write_pos),
           is_optional ? " [<%s>]" : " <%s>",
           arg_def.name);
         break;
@@ -741,23 +742,33 @@ void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool pr
     char line[Config::MAX_DESC_LEN * 2] = {};
     int write_pos                       = 0;
 
-    write_pos +=
-      snprintf(line + write_pos, sizeof(line) - (size_t)write_pos, "%s-%-14s", arg_pad, d.name);
+    write_pos += snprintf(line + write_pos,
+      sizeof(line) - static_cast<size_t>(write_pos),
+      "%s-%-14s",
+      arg_pad,
+      d.name);
     clampWritePos(write_pos, sizeof(line));
 
     if (aliases[0]) {
-      write_pos += snprintf(line + write_pos, sizeof(line) - (size_t)write_pos, " %-12s", aliases);
+      write_pos += snprintf(line + write_pos,
+        sizeof(line) - static_cast<size_t>(write_pos),
+        " %-12s",
+        aliases);
     } else {
-      write_pos += snprintf(line + write_pos, sizeof(line) - (size_t)write_pos, "             ");
+      write_pos +=
+        snprintf(line + write_pos, sizeof(line) - static_cast<size_t>(write_pos), "             ");
     }
     clampWritePos(write_pos, sizeof(line));
 
-    write_pos += snprintf(line + write_pos, sizeof(line) - (size_t)write_pos, " %s", type_tag);
+    write_pos +=
+      snprintf(line + write_pos, sizeof(line) - static_cast<size_t>(write_pos), " %s", type_tag);
     clampWritePos(write_pos, sizeof(line));
 
     if (d.description) {
-      write_pos +=
-        snprintf(line + write_pos, sizeof(line) - (size_t)write_pos, " %s", d.description);
+      write_pos += snprintf(line + write_pos,
+        sizeof(line) - static_cast<size_t>(write_pos),
+        " %s",
+        d.description);
       clampWritePos(write_pos, sizeof(line));
     }
 
@@ -781,7 +792,7 @@ void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool pr
 
       if (default_str[0]) {
         write_pos += snprintf(line + write_pos,
-          sizeof(line) - (size_t)write_pos,
+          sizeof(line) - static_cast<size_t>(write_pos),
           " (default: %s)",
           default_str);
         clampWritePos(write_pos, sizeof(line));
@@ -789,7 +800,8 @@ void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool pr
     }
 
     if (d.is_required) {
-      write_pos += snprintf(line + write_pos, sizeof(line) - (size_t)write_pos, " *required*");
+      write_pos +=
+        snprintf(line + write_pos, sizeof(line) - static_cast<size_t>(write_pos), " *required*");
       clampWritePos(write_pos, sizeof(line));
     }
 
