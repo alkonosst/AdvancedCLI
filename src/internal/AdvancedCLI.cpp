@@ -510,6 +510,7 @@ Command* AdvancedCLI::_findCommand(const char* name, size_t name_len) {
   name_buf[safe_len] = '\0';
 
   for (uint16_t i = 0; i < _cmd_count; ++i) {
+    if (_commands[i].isSubCommand()) continue; // only match top-level commands
     if (strEqual(_commands[i].getName(), name_buf, _case_sensitive)) {
       return &_commands[i];
     }
@@ -555,7 +556,7 @@ uint8_t AdvancedCLI::_tokenize(const char* input, size_t input_len,
       char current_char = input[i];
 
       if (quoted) {
-        if (current_char == '\\' && i + 1 < input_len) {
+        if ((current_char == '\\') && ((static_cast<size_t>(i) + 1) < input_len)) {
           // Escape sequence
           ++i;
           char escape_char = input[i];
