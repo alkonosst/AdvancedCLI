@@ -1,4 +1,10 @@
 /**
+ * SPDX-FileCopyrightText: 2026 Maximiliano Ramirez <maximiliano.ramirezbravo@gmail.com>
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
  * Unit tests for AdvancedCLI.
  *
  * Each test function creates a fresh CLI instance (or reuses a module-level one where
@@ -34,11 +40,15 @@
  * - Persistent arguments (addPersistentIntArg / addPersistentFlag / getArgByName fallback)
  */
 
-#include <Arduino.h>
+#ifdef ARDUINO
+#  include <Arduino.h>
+#else
+#  include <cstring>
+#endif
+
 #include <unity.h>
 
 #include <AdvancedCLI.h>
-
 using namespace ACLI;
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -57,8 +67,8 @@ struct OutputCapture {
 
   OutputFn fn() {
     return [this](const char* s) {
-      int sl = (int)strlen(s);
-      if (len + sl < (int)sizeof(buf) - 1) {
+      int sl = static_cast<int>(strlen(s));
+      if (len + sl < static_cast<int>(sizeof(buf)) - 1) {
         memcpy(buf + len, s, sl);
         len += sl;
         buf[len] = '\0';
@@ -96,7 +106,7 @@ static void test_getCommandCount() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
-/*                                          getArgCount() */
+/*                                          getArgCount()                                         */
 /* ---------------------------------------------------------------------------------------------- */
 
 static void test_getArgCount_zero_with_no_commands() {
@@ -1165,7 +1175,7 @@ static void test_getParsedArgCount_all_when_all_provided() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
-/*                                     printHelp(depth)                                          */
+/*                                     printHelp(depth)                                           */
 /* ---------------------------------------------------------------------------------------------- */
 
 static void test_printHelp_depth1_hides_subcommands_and_args() {
@@ -1620,13 +1630,18 @@ static void test_command_printHelp_depth_control() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
-/*                                          setup / loop                                          */
+/*                                             Runners                                            */
 /* ---------------------------------------------------------------------------------------------- */
 
-void setup() {
-  Serial.begin(115200);
-  delay(2000);
+void setUp(void) {
+  // set stuff up here
+}
 
+void tearDown(void) {
+  // clean stuff up here
+}
+
+int runUnityTests(void) {
   UNITY_BEGIN();
 
   // Basic dispatch
@@ -1784,7 +1799,17 @@ void setup() {
   RUN_TEST(test_command_printHelp_disambiguates_from_callback);
   RUN_TEST(test_command_printHelp_depth_control);
 
-  UNITY_END();
+  return UNITY_END();
 }
 
+// For native
+int main(void) { return runUnityTests(); }
+
+// For Arduino framework
+#ifdef ARDUINO
+void setup() {
+  delay(2000);
+  runUnityTests();
+}
 void loop() {}
+#endif
