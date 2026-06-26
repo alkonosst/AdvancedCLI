@@ -38,6 +38,7 @@
  * - printHelp(const Command&) and Command::printHelp()
  * - Duplicate arg name detection
  * - Persistent arguments (addPersistentIntArg / addPersistentFlag / getArgByName fallback)
+ * - Defensive/edge case tests
  */
 
 #ifdef ARDUINO
@@ -1630,6 +1631,883 @@ static void test_command_printHelp_depth_control() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
+/*                         Builder-handle query methods (ArgBaseImpl)                             */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_builder_handle_query_methods() {
+  // isSet() and operator bool() called on the builder handle itself (not the parsed reader).
+  AdvancedCLI cli;
+  ArgStr h;
+  bool set_via_builder  = false;
+  bool bool_via_builder = false;
+
+  auto& cmd = cli.addCommand("q");
+  h         = cmd.addArg("v");
+  cmd.onExecute([&](Command&) {
+    set_via_builder  = h.isSet();
+    bool_via_builder = static_cast<bool>(h);
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("q --v x"));
+  TEST_ASSERT_TRUE(set_via_builder);
+  TEST_ASSERT_TRUE(bool_via_builder);
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                 Builder methods across all argument types (template instances)                 */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_builder_methods_all_types() {
+  // Exercises setAlias/setDescription/setRequired/onInvalid for every handle type, ensuring each
+  // template instantiation is covered (gcov tracks instantiations separately).
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("build");
+
+  ArgStr s = cmd.addArg("s");
+  s.setAlias("salias")
+    .setDescription("string arg")
+    .onInvalid([](const char*, const char*, const char*) {});
+
+  ArgFlag f = cmd.addFlag("f");
+  f.setAlias("falias")
+    .setDescription("flag arg")
+    .setRequired()
+    .onInvalid([](const char*, const char*, const char*) {});
+
+  ArgInt i = cmd.addIntArg("i");
+  i.setAlias("ialias").setDescription("int arg");
+
+  ArgFloat fl = cmd.addFloatArg("fl");
+  fl.setAlias("flalias")
+    .setDescription("float arg")
+    .setRequired()
+    .onInvalid([](const char*, const char*, const char*) {});
+
+  TEST_ASSERT_TRUE(s.isValid());
+  TEST_ASSERT_TRUE(f.isValid());
+  TEST_ASSERT_TRUE(i.isValid());
+  TEST_ASSERT_TRUE(fl.isValid());
+}
+
+static void test_argbase_direct_instantiation() {
+  // The CRTP base's complete-object constructor is emitted by the explicit template instantiations
+  // but never invoked through the derived handles. Construct each base directly to cover it.
+  detail::ArgBase<ArgStr> a_str(nullptr, -1);
+  detail::ArgBase<ArgFlag> a_flag(nullptr, -1);
+  detail::ArgBase<ArgInt> a_int(nullptr, -1);
+  detail::ArgBase<ArgFloat> a_float(nullptr, -1);
+
+  TEST_ASSERT_FALSE(a_str.isValid());
+  TEST_ASSERT_FALSE(a_flag.isValid());
+  TEST_ASSERT_FALSE(a_int.isValid());
+  TEST_ASSERT_FALSE(a_float.isValid());
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                        Reader query methods (ArgReaderBase / ParsedAny)                        */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_reader_query_methods() {
+  AdvancedCLI cli;
+  ArgStr h;
+  const char* name   = nullptr;
+  const char* desc   = nullptr;
+  bool reader_bool   = false;
+  const char* anyval = nullptr;
+
+  auto& cmd = cli.addCommand("r");
+  h         = cmd.addArg("v").setDescription("the v");
+  cmd.onExecute([&](Command& c) {
+    auto reader  = c.getArg(h); // ParsedStr
+    name         = reader.getName();
+    desc         = reader.getDescription();
+    reader_bool  = static_cast<bool>(reader);
+    ParsedAny pa = reader; // ParsedAny(const ArgReaderBase&) implicit conversion
+    anyval       = pa.getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("r --v hello"));
+  TEST_ASSERT_EQUAL_STRING("v", name);
+  TEST_ASSERT_EQUAL_STRING("the v", desc);
+  TEST_ASSERT_TRUE(reader_bool);
+  TEST_ASSERT_EQUAL_STRING("hello", anyval);
+}
+
+static void test_getArg_foreign_handle_returns_invalid() {
+  // getArg() with a handle that belongs to another (non-parent) command must return an invalid
+  // reader. Covers every getArg<T> instantiation's "no match" return.
+  AdvancedCLI cli;
+  ArgStr hs;
+  ArgInt hi;
+  ArgFloat hf;
+  ArgFlag hfl;
+  bool all_invalid = false;
+
+  auto& a = cli.addCommand("a");
+  hs      = a.addArg("s");
+  hi      = a.addIntArg("i");
+  hf      = a.addFloatArg("f");
+  hfl     = a.addFlag("fl");
+
+  auto& b = cli.addCommand("b");
+  b.onExecute([&](Command& c) {
+    all_invalid = !c.getArg(hs).isValid() && !c.getArg(hi).isValid() && !c.getArg(hf).isValid() &&
+                  !c.getArg(hfl).isValid();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("b"));
+  TEST_ASSERT_TRUE(all_invalid);
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                       Positional typed args / persistent string + float                       */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_addPosIntArg_and_addPosFloatArg() {
+  AdvancedCLI cli;
+  ArgInt hi;
+  ArgFloat hf;
+  int32_t gi = 0;
+  float gf   = 0.f;
+
+  auto& cmd = cli.addCommand("pt");
+  hi        = cmd.addPosIntArg("n");
+  hf        = cmd.addPosFloatArg("f");
+  cmd.onExecute([&](Command& c) {
+    gi = c.getArg(hi).getValue();
+    gf = c.getArg(hf).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("pt 42 3.5"));
+  TEST_ASSERT_EQUAL(42, gi);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.5f, gf);
+}
+
+static void test_persistent_string_arg_read_from_sub() {
+  // addPersistentArg (string) provided, read inside the sub-command (getArg<ArgStr> parent path).
+  AdvancedCLI cli;
+  ArgStr h;
+  const char* got = nullptr;
+
+  auto& joy = cli.addCommand("joy");
+  h         = joy.addPersistentArg("tag", "none");
+  joy.addSubCommand("cal").onExecute([&](Command& c) { got = c.getArg(h).getValue(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -tag hello cal"));
+  TEST_ASSERT_EQUAL_STRING("hello", got);
+}
+
+static void test_persistent_string_arg_default_in_sub() {
+  AdvancedCLI cli;
+  ArgStr h;
+  const char* got = nullptr;
+
+  auto& joy = cli.addCommand("joy");
+  h         = joy.addPersistentArg("tag", "none");
+  joy.addSubCommand("cal").onExecute([&](Command& c) { got = c.getArg(h).getValue(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy cal"));
+  TEST_ASSERT_EQUAL_STRING("none", got);
+}
+
+static void test_persistent_float_arg_variants_read_from_sub() {
+  // addPersistentFloatArg with and without default, read inside the sub-command
+  // (getArg<ArgFloat> parent path).
+  AdvancedCLI cli;
+  ArgFloat hx;
+  ArgFloat hy;
+  float gx = 0.f;
+  float gy = 0.f;
+
+  auto& joy = cli.addCommand("joy");
+  hx        = joy.addPersistentFloatArg("x");       // no default
+  hy        = joy.addPersistentFloatArg("y", 2.5f); // with default
+  joy.addSubCommand("cal").onExecute([&](Command& c) {
+    gx = c.getArg(hx).getValue();
+    gy = c.getArg(hy).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -x 1.5 cal"));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.5f, gx);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.5f, gy); // default used
+}
+
+static void test_command_isValid() {
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("c");
+  TEST_ASSERT_TRUE(cmd.isValid());
+
+  Command dummy; // default-constructed, never registered
+  TEST_ASSERT_FALSE(dummy.isValid());
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                                Parse error / default paths                                     */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_did_you_mean_suggestion() {
+  // Unknown command that is a prefix of a registered command, with no onUnknownCommand handler.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  cli.addCommand("ping").onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("pin"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Did you mean"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "ping"));
+}
+
+static void test_unknown_argument_main_loop_fails() {
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("cmd");
+  cmd.addArg("known");
+  cmd.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("cmd --bogus"));
+}
+
+static void test_named_arg_uses_default_when_value_absent() {
+  // Named args present without a following value fall back to their defaults.
+  AdvancedCLI cli;
+  ArgInt hi;
+  ArgStr hs;
+  int32_t gi     = 0;
+  const char* gs = nullptr;
+
+  auto& cmd = cli.addCommand("cmd");
+  hi        = cmd.addIntArg("i", 9);  // typed default -> null token branch
+  hs        = cmd.addArg("s", "def"); // string default -> str token branch
+  cmd.onExecute([&](Command& c) {
+    gi = c.getArg(hi).getValue();
+    gs = c.getArg(hs).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("cmd --i --s"));
+  TEST_ASSERT_EQUAL(9, gi);
+  TEST_ASSERT_EQUAL_STRING("def", gs);
+}
+
+static void test_named_arg_expects_value_error() {
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("cmd");
+  cmd.addArg("x"); // no default
+  cmd.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("cmd --x"));
+}
+
+static void test_type_check_errors_main_loop() {
+  // Int and float args given non-numeric values trigger the type-check error path.
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("cmd");
+  cmd.addIntArg("i");
+  cmd.addFloatArg("f");
+  cmd.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("cmd --i abc --f xyz"));
+}
+
+static void test_persistent_type_check_errors() {
+  // Persistent int/float args with invalid values trigger the persistent type-check error path.
+  AdvancedCLI cli;
+  auto& joy = cli.addCommand("joy");
+  joy.addPersistentIntArg("n");
+  joy.addPersistentFloatArg("r");
+  joy.addSubCommand("cal").onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("joy -n abc -r xyz cal"));
+}
+
+static void test_persistent_named_defaults_when_next_is_flag() {
+  // A persistent named arg immediately followed by a flag falls back to its default.
+  AdvancedCLI cli;
+  ArgStr h_a;
+  const char* got_a = nullptr;
+  bool cal_called   = false;
+
+  Command& joy = cli.addCommand("joy");
+  h_a          = joy.addPersistentArg("a", "fallback");
+  joy.addPersistentFlag("b");
+  joy.addSubCommand("cal").onExecute([&](Command& c) {
+    cal_called = true;
+    got_a      = c.getArg(h_a).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -a -b cal"));
+  TEST_ASSERT_TRUE(cal_called);
+  TEST_ASSERT_EQUAL_STRING("fallback", got_a);
+}
+
+static void test_persistent_named_missing_value_errors() {
+  // A persistent named arg with no value and no default reports an error.
+  AdvancedCLI cli;
+  Command& joy = cli.addCommand("joy");
+  joy.addPersistentArg("a"); // no default
+  joy.addPersistentFlag("b");
+  joy.addSubCommand("cal").onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("joy -a -b cal"));
+}
+
+static void test_persistent_unknown_flag_skipped() {
+  // An unknown flag in the persistent-arg region is skipped gracefully.
+  AdvancedCLI cli;
+  ArgStr h_a;
+  const char* got_a = nullptr;
+  bool cal_called   = false;
+
+  Command& joy = cli.addCommand("joy");
+  h_a          = joy.addPersistentArg("a", "fallback");
+  joy.addSubCommand("cal").onExecute([&](Command& c) {
+    cal_called = true;
+    got_a      = c.getArg(h_a).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -a -z cal"));
+  TEST_ASSERT_TRUE(cal_called);
+  TEST_ASSERT_EQUAL_STRING("fallback", got_a);
+}
+
+static void test_addCommand_null_name() {
+  AdvancedCLI cli;
+  cli.addCommand(nullptr);
+  TEST_ASSERT_FALSE(cli.isValid());
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                                   Tokenizer escape sequences                                   */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_tokenizer_escape_sequences() {
+  AdvancedCLI cli;
+  ArgStr h;
+  const char* got = nullptr;
+
+  auto& cmd = cli.addCommand("cmd");
+  h         = cmd.addArg("v");
+  cmd.onExecute([&](Command& c) { got = c.getArg(h).getValue(); });
+
+  // Escapes inside a quoted token: \" \' \\ \n \t and an unrecognised \z (passes char through).
+  TEST_ASSERT_TRUE(cli.inject(R"(cmd --v "x\"\'\\\n\t\zy")"));
+  TEST_ASSERT_EQUAL_STRING("x\"'\\\n\tzy", got);
+
+  // A backslash as the very last character (no room for an escape) is taken literally.
+  TEST_ASSERT_TRUE(cli.inject("cmd --v \"ab\\"));
+  TEST_ASSERT_EQUAL_STRING("ab\\", got);
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                              inject() buffer overload edge cases                               */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_inject_null_buffer_delegates() {
+  AdvancedCLI cli;
+  bool called = false;
+  cli.addCommand("cmd").onExecute([&](Command&) { called = true; });
+
+  TEST_ASSERT_TRUE(cli.inject("cmd", nullptr, 10)); // null buffer -> delegates
+  TEST_ASSERT_TRUE(called);
+
+  char buf[8];
+  TEST_ASSERT_TRUE(cli.inject("cmd", buf, 0)); // zero size -> delegates
+}
+
+static void test_inject_small_buffer_truncates() {
+  AdvancedCLI cli;
+  cli.addCommand("help").onExecute([&](Command&) { cli.printHelp(); });
+
+  char small[6] = {};
+  cli.inject("help", small, sizeof(small)); // forces the buffer-full / truncation paths
+  TEST_ASSERT_TRUE(strlen(small) <= sizeof(small) - 1);
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                          printHelp(cmd_name) with sub-commands / args                          */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_printHelp_by_name_with_subcommands() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& wifi = cli.addCommand("wifi").setDescription("WiFi");
+  wifi.addSubCommand("scan").setDescription("Scan nets");
+
+  cli.printHelp("wifi", 3);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "scan"));
+}
+
+static void test_printHelp_renders_all_arg_features() {
+  // A single help dump that exercises alias rendering, every type tag, descriptions and all
+  // default-value kinds in _printCommandEntry.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  auto& cmd = cli.addCommand("config").setDescription("configure");
+  cmd.addArg("name", "guest").setAlias("n").setDescription("user name");
+  cmd.addFlag("verbose").setAlias("v");
+  cmd.addPosArg("target");
+  cmd.addIntArg("count", 5);
+  cmd.addFloatArg("ratio", 1.5f);
+  cmd.addArg("empty", ""); // empty string default -> default not rendered
+
+  cli.printHelp(3);
+
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "(-n)"));      // alias rendered
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "[flag ]"));   // flag type tag
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "[pos  ]"));   // positional type tag
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "user name")); // arg description
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "default: guest"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "default: 5"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "default: 1.5"));
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                              Defensive / edge-case branch coverage                             */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_parse_input_guards() {
+  AdvancedCLI cli;
+  cli.addCommand("cmd").onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.parse(nullptr));          // null input
+  TEST_ASSERT_FALSE(cli.parse(nullptr, 5));       // null input with length
+  TEST_ASSERT_FALSE(cli.parse("cmd", (size_t)0)); // zero length
+  TEST_ASSERT_TRUE(cli.parse("   "));             // whitespace only -> no tokens, not an error
+
+  // Input longer than MAX_INPUT_LEN is capped (not a crash); unknown command -> false
+  char big[Config::MAX_INPUT_LEN + 64];
+  memset(big, 'a', sizeof(big) - 1);
+  big[sizeof(big) - 1] = '\0';
+  TEST_ASSERT_FALSE(cli.parse(big));
+}
+
+static void test_invalid_handle_builder_methods_safe() {
+  // Builder methods on default (invalid) handles must be safe no-ops.
+  ArgStr s;
+  ArgFlag f;
+  ArgInt i;
+  ArgFloat fl;
+  auto noop = [](const char*, const char*, const char*) {};
+
+  s.setAlias("x").setDescription("d").setRequired().onInvalid(noop);
+  f.setAlias("x").setDescription("d").setRequired().onInvalid(noop);
+  i.setAlias("x").setDescription("d").setRequired().onInvalid(noop);
+  fl.setAlias("x").setDescription("d").setRequired().onInvalid(noop);
+
+  TEST_ASSERT_FALSE(s.isValid());
+  TEST_ASSERT_FALSE(s.isSet()); // ArgBaseImpl::isSet with null _parsed
+  TEST_ASSERT_FALSE(static_cast<bool>(f));
+}
+
+static void test_setAlias_edge_cases() {
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("c");
+  ArgStr h  = cmd.addArg("a");
+
+  h.setAlias(nullptr); // null alias name branch
+
+  // Exceed MAX_ALIASES; extra aliases are ignored.
+  char names[Config::MAX_ALIASES + 1][4] = {};
+  for (uint8_t k = 0; k <= Config::MAX_ALIASES; ++k) {
+    names[k][0] = 'a';
+    names[k][1] = static_cast<char>('0' + k);
+    names[k][2] = '\0';
+    h.setAlias(names[k]);
+  }
+  TEST_ASSERT_TRUE(h.isValid());
+}
+
+static void test_setValidator_null_and_invalid_handle() {
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("c");
+  cmd.addArg("s").setValidator(nullptr);      // ArgStr: null fn
+  cmd.addIntArg("i").setValidator(nullptr);   // ArgInt: null fn
+  cmd.addFloatArg("f").setValidator(nullptr); // ArgFloat: null fn
+
+  ArgStr().setValidator([](const char*) { return true; }); // invalid handle
+  ArgInt().setValidator([](int32_t) { return true; });
+  ArgFloat().setValidator([](float) { return true; });
+
+  TEST_ASSERT_TRUE(cmd.isValid());
+}
+
+static void test_reader_invalid_handle() {
+  ParsedStr ps;
+  ParsedInt pi;
+  ParsedFloat pf;
+
+  TEST_ASSERT_FALSE(ps.isValid());
+  TEST_ASSERT_FALSE(ps.isSet());
+  TEST_ASSERT_NULL(ps.getName());        // _def null -> nullptr
+  TEST_ASSERT_NULL(ps.getDescription()); // _def null -> nullptr
+  TEST_ASSERT_FALSE(static_cast<bool>(ps));
+  TEST_ASSERT_EQUAL(7, pi.getValue(7));                      // empty value -> default
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.5f, pf.getValue(2.5f)); // empty value -> default
+}
+
+static void test_type_check_trailing_chars() {
+  // Values that start numeric but contain trailing junk fail the type check.
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("cmd");
+  cmd.addIntArg("i");
+  cmd.addFloatArg("f");
+  cmd.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("cmd --i 12abc"));
+  TEST_ASSERT_FALSE(cli.inject("cmd --f 1.2.3"));
+}
+
+static void test_persistent_int_defaults_when_next_is_flag() {
+  // Persistent typed (int) arg using its default -> the null-token default branch.
+  AdvancedCLI cli;
+  ArgInt h_n;
+  int32_t got_n   = -1;
+  bool cal_called = false;
+
+  Command& joy = cli.addCommand("joy");
+  h_n          = joy.addPersistentIntArg("n", 5);
+  joy.addPersistentFlag("b");
+  joy.addSubCommand("cal").onExecute([&](Command& c) {
+    cal_called = true;
+    got_n      = c.getArg(h_n).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n -b cal"));
+  TEST_ASSERT_TRUE(cal_called);
+  TEST_ASSERT_EQUAL(5, got_n); // default used
+}
+
+static void test_persistent_arg_as_last_token() {
+  // Persistent named arg as the final token (no following value token in the scan).
+  AdvancedCLI cli;
+  ArgInt h_n;
+  int32_t got_n = -1;
+
+  Command& joy = cli.addCommand("joy");
+  h_n          = joy.addPersistentIntArg("n", 8);
+  joy.addSubCommand("cal").onExecute([](Command&) {});
+  joy.onExecute([&](Command& c) { got_n = c.getArg(h_n).getValue(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n"));
+  TEST_ASSERT_EQUAL(8, got_n); // default used, parent executed standalone
+}
+
+static void test_parent_nonpersistent_arg_skipped_in_validation() {
+  // A parent's non-persistent arg is skipped during the sub-command persistent-arg validation.
+  AdvancedCLI cli;
+  ArgInt h_n;
+  bool cal_called = false;
+
+  Command& joy = cli.addCommand("joy");
+  joy.addArg("plain"); // non-persistent parent arg
+  h_n = joy.addPersistentIntArg("n");
+  joy.addSubCommand("cal").onExecute([&](Command&) { cal_called = true; });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n 2 cal"));
+  TEST_ASSERT_TRUE(cal_called);
+}
+
+static void test_subcommand_usage_includes_parent_persistent() {
+  // A failing sub-command builds a usage string that interleaves the parent's persistent args.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& joy = cli.addCommand("joy");
+  joy.addPersistentIntArg("n").setRequired(); // required persistent named
+  joy.addPersistentFlag("v");                 // persistent flag
+  Command& cal = joy.addSubCommand("cal");
+  cal.addArg("x").setRequired(); // required sub-command arg (forces the error + usage)
+  cal.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("joy -n 1 cal")); // -x missing -> error with usage
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Usage"));
+}
+
+static void test_did_you_mean_mixed_case_skips_subcommands() {
+  // Uppercase unknown token, candidate registered with uppercase, and a sub-command present that
+  // the suggestion loop must skip.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& menu = cli.addCommand("menu");
+  menu.addSubCommand("sub");
+  cli.addCommand("Ping").onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("PI"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Did you mean"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Ping"));
+}
+
+static void test_printHelp_by_name_skips_nonmatching() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  cli.addCommand("other").setDescription("Other");
+  Command& wifi = cli.addCommand("wifi").setDescription("WiFi");
+  wifi.addSubCommand("scan").setDescription("Scan");
+
+  cli.printHelp("wifi");
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "Other"));
+}
+
+static void test_tokenizer_edge_cases() {
+  AdvancedCLI cli;
+  ArgStr h;
+  const char* got = nullptr;
+  auto& cmd       = cli.addCommand("cmd");
+  h               = cmd.addPosArg("v");
+  cmd.onExecute([&](Command& c) { got = c.getArg(h).getValue(); });
+
+  // Trailing whitespace after the last token.
+  TEST_ASSERT_TRUE(cli.inject("cmd hello   "));
+  TEST_ASSERT_EQUAL_STRING("hello", got);
+
+  // An empty quoted token is still produced as a (empty) positional value.
+  TEST_ASSERT_TRUE(cli.inject("cmd \"\""));
+  TEST_ASSERT_EQUAL_STRING("", got);
+
+  // A token longer than MAX_TOKEN_LEN is truncated, not overflowed.
+  char longtok[Config::MAX_TOKEN_LEN + 16];
+  const char prefix[] = "cmd ";
+  size_t plen         = strlen(prefix);
+  memcpy(longtok, prefix, plen);
+  memset(longtok + plen, 'z', sizeof(longtok) - plen - 1);
+  longtok[sizeof(longtok) - 1] = '\0';
+  TEST_ASSERT_TRUE(cli.inject(longtok));
+  TEST_ASSERT_TRUE(strlen(got) <= Config::MAX_TOKEN_LEN - 1);
+}
+
+static void test_help_long_description_and_multi_alias() {
+  // Multiple aliases on a printed arg and an over-long line exercise the alias loop and the
+  // write-position clamp.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  static const char long_desc[] =
+    "this is a very long argument description that exceeds the line buffer used by the help "
+    "renderer so that the write position clamp is exercised at least once here";
+
+  auto& cmd = cli.addCommand("c");
+  cmd.addArg("name").setAlias("n").setAlias("nm").setDescription(long_desc);
+
+  cli.printHelp(3);
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "-n"));
+}
+
+static void test_fail_empty_message_no_output() {
+  // cmd.fail("") with no onError handler and a sink: the empty message is not printed.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  cli.addCommand("boom").onExecute([](Command& c) { c.fail(""); });
+
+  TEST_ASSERT_FALSE(cli.inject("boom"));
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/*                       Command-level defensive / overflow branch coverage                      */
+/* ---------------------------------------------------------------------------------------------- */
+
+static void test_add_arg_methods_on_full_pool_return_invalid() {
+  // With the argument pool exhausted, every add*Arg variant must return an invalid handle.
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("fill");
+
+  static char names[Config::MAX_ARGS_TOTAL][4] = {};
+  for (uint16_t k = 0; k < Config::MAX_ARGS_TOTAL; ++k) {
+    names[k][0] = 'a';
+    names[k][1] = static_cast<char>('0' + (k % 10));
+    names[k][2] = static_cast<char>('0' + (k / 10));
+    names[k][3] = '\0';
+    cmd.addIntArg(names[k]);
+  }
+
+  TEST_ASSERT_FALSE(cmd.addArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addFlag("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addIntArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addIntArg("x", 1).isValid());
+  TEST_ASSERT_FALSE(cmd.addFloatArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addFloatArg("x", 1.f).isValid());
+  TEST_ASSERT_FALSE(cmd.addPosArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addPosIntArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addPosFloatArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addPersistentArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addPersistentFlag("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addPersistentIntArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addPersistentIntArg("x", 1).isValid());
+  TEST_ASSERT_FALSE(cmd.addPersistentFloatArg("x").isValid());
+  TEST_ASSERT_FALSE(cmd.addPersistentFloatArg("x", 1.f).isValid());
+}
+
+static void test_dummy_command_methods_safe() {
+  // Methods on a default-constructed (never registered) Command must be safe no-ops.
+  Command dummy;
+  TEST_ASSERT_FALSE(dummy.getArgByName("x").isValid());
+  TEST_ASSERT_FALSE(dummy.addArg("x").isValid()); // _addArgInternal: !_owner
+  TEST_ASSERT_FALSE(dummy.addSubCommand("s").isValid());
+  TEST_ASSERT_EQUAL_STRING("", dummy.getName());
+  TEST_ASSERT_EQUAL_STRING("", dummy.getDescription());
+  TEST_ASSERT_EQUAL(0, dummy.getParsedArgCount());
+  dummy.fail("boom"); // _owner null -> no-op
+  dummy.printHelp();  // _owner null -> no-op
+}
+
+static void test_getArgByName_edge_cases() {
+  AdvancedCLI cli;
+  bool null_invalid = false;
+  bool miss_invalid = false;
+
+  auto& cmd = cli.addCommand("c");
+  cmd.addArg("a");
+  cmd.onExecute([&](Command& c) {
+    null_invalid = !c.getArgByName(nullptr).isValid();
+    miss_invalid = !c.getArgByName("zzz").isValid();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("c"));
+  TEST_ASSERT_TRUE(null_invalid);
+  TEST_ASSERT_TRUE(miss_invalid);
+}
+
+static void test_getArgByName_parent_fallback_skips_nonpersistent() {
+  AdvancedCLI cli;
+  bool miss = false;
+
+  Command& joy = cli.addCommand("joy");
+  joy.addArg("plain");          // non-persistent parent arg -> skipped during fallback
+  joy.addPersistentIntArg("n"); // persistent
+  joy.addSubCommand("cal").onExecute([&](Command& c) { miss = !c.getArgByName("nope").isValid(); });
+
+  TEST_ASSERT_TRUE(cli.inject("joy -n 1 cal"));
+  TEST_ASSERT_TRUE(miss);
+}
+
+static void test_command_no_callback_executes_safely() {
+  AdvancedCLI cli;
+  cli.addCommand("c"); // no onExecute
+  TEST_ASSERT_TRUE(cli.inject("c"));
+}
+
+static void test_addArg_null_name() {
+  AdvancedCLI cli;
+  auto& cmd = cli.addCommand("c");
+  TEST_ASSERT_FALSE(cmd.addArg(nullptr).isValid());
+}
+
+static void test_find_named_skips_positional() {
+  AdvancedCLI cli;
+  ArgStr hp;
+  ArgInt hn;
+  const char* gp = nullptr;
+  int32_t gn     = 0;
+
+  auto& cmd = cli.addCommand("c");
+  hp        = cmd.addPosArg("pos");
+  hn        = cmd.addIntArg("n");
+  cmd.onExecute([&](Command& c) {
+    gp = c.getArg(hp).getValue();
+    gn = c.getArg(hn).getValue();
+  });
+
+  TEST_ASSERT_TRUE(cli.inject("c here -n 5"));
+  TEST_ASSERT_EQUAL_STRING("here", gp);
+  TEST_ASSERT_EQUAL(5, gn);
+}
+
+static void test_arg_registration_contiguity_guard() {
+  // Registering an arg on an earlier command after a later command exists is rejected.
+  AdvancedCLI cli;
+  auto& a = cli.addCommand("a");
+  a.addArg("x");
+  auto& b = cli.addCommand("b");
+  b.addArg("y");
+  TEST_ASSERT_FALSE(a.addArg("z").isValid());
+}
+
+static void test_fail_null_message() {
+  AdvancedCLI cli;
+  cli.addCommand("boom").onExecute([](Command& c) { c.fail(nullptr); });
+  TEST_ASSERT_FALSE(cli.inject("boom"));
+}
+
+static void test_setAlias_overflow_all_types() {
+  // Alias overflow on flag/int/float handles (per-type template instantiation).
+  AdvancedCLI cli;
+  auto& cmd   = cli.addCommand("c");
+  ArgFlag f   = cmd.addFlag("f");
+  ArgInt i    = cmd.addIntArg("i");
+  ArgFloat fl = cmd.addFloatArg("fl");
+
+  static char nm[Config::MAX_ALIASES + 1][6] = {};
+  for (uint8_t k = 0; k <= Config::MAX_ALIASES; ++k) {
+    nm[k][0] = 'z';
+    nm[k][1] = static_cast<char>('0' + k);
+    nm[k][2] = '\0';
+    f.setAlias(nm[k]);
+    i.setAlias(nm[k]);
+    fl.setAlias(nm[k]);
+  }
+  TEST_ASSERT_TRUE(f.isValid());
+  TEST_ASSERT_TRUE(i.isValid());
+  TEST_ASSERT_TRUE(fl.isValid());
+}
+
+static void test_printHelp_by_name_edge_cases() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& wifi = cli.addCommand("wifi");
+  wifi.addSubCommand("scan");
+
+  cli.printHelp(nullptr);       // null name -> no-op
+  cli.printHelp("nonexistent"); // not found -> no-op
+  TEST_ASSERT_EQUAL(0, cap.len);
+
+  cli.printHelp("wifi", 1); // depth 1 -> sub-commands hidden
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "wifi"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "scan"));
+}
+
+static void test_builder_handle_isSet_false_when_absent() {
+  AdvancedCLI cli;
+  ArgFlag h;
+  bool was_set = true;
+
+  auto& cmd = cli.addCommand("c");
+  h         = cmd.addFlag("f");
+  cmd.onExecute([&](Command&) { was_set = h.isSet(); });
+
+  TEST_ASSERT_TRUE(cli.inject("c")); // flag absent
+  TEST_ASSERT_FALSE(was_set);
+}
+
+static void test_usage_string_all_arg_types() {
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  auto& cmd = cli.addCommand("c");
+  cmd.addFlag("ff");
+  cmd.addArg("nn");
+  cmd.addPosArg("pp").setRequired();
+  cmd.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("c")); // required positional missing -> usage with all arg types
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Usage"));
+}
+
+/* ---------------------------------------------------------------------------------------------- */
 /*                                             Runners                                            */
 /* ---------------------------------------------------------------------------------------------- */
 
@@ -1798,6 +2676,75 @@ int runUnityTests(void) {
   RUN_TEST(test_command_printHelp_inside_callback);
   RUN_TEST(test_command_printHelp_disambiguates_from_callback);
   RUN_TEST(test_command_printHelp_depth_control);
+
+  // Builder-handle query methods + all-type builder coverage
+  RUN_TEST(test_builder_handle_query_methods);
+  RUN_TEST(test_builder_methods_all_types);
+  RUN_TEST(test_argbase_direct_instantiation);
+
+  // Reader query methods + getArg edge cases
+  RUN_TEST(test_reader_query_methods);
+  RUN_TEST(test_getArg_foreign_handle_returns_invalid);
+
+  // Positional typed args / persistent string + float
+  RUN_TEST(test_addPosIntArg_and_addPosFloatArg);
+  RUN_TEST(test_persistent_string_arg_read_from_sub);
+  RUN_TEST(test_persistent_string_arg_default_in_sub);
+  RUN_TEST(test_persistent_float_arg_variants_read_from_sub);
+  RUN_TEST(test_command_isValid);
+
+  // Parse error / default paths
+  RUN_TEST(test_did_you_mean_suggestion);
+  RUN_TEST(test_unknown_argument_main_loop_fails);
+  RUN_TEST(test_named_arg_uses_default_when_value_absent);
+  RUN_TEST(test_named_arg_expects_value_error);
+  RUN_TEST(test_type_check_errors_main_loop);
+  RUN_TEST(test_persistent_type_check_errors);
+  RUN_TEST(test_persistent_named_defaults_when_next_is_flag);
+  RUN_TEST(test_persistent_named_missing_value_errors);
+  RUN_TEST(test_persistent_unknown_flag_skipped);
+  RUN_TEST(test_addCommand_null_name);
+
+  // Tokenizer escapes + inject buffer edge cases
+  RUN_TEST(test_tokenizer_escape_sequences);
+  RUN_TEST(test_inject_null_buffer_delegates);
+  RUN_TEST(test_inject_small_buffer_truncates);
+
+  // printHelp rendering details
+  RUN_TEST(test_printHelp_by_name_with_subcommands);
+  RUN_TEST(test_printHelp_renders_all_arg_features);
+
+  // Defensive / edge-case branch coverage
+  RUN_TEST(test_parse_input_guards);
+  RUN_TEST(test_invalid_handle_builder_methods_safe);
+  RUN_TEST(test_setAlias_edge_cases);
+  RUN_TEST(test_setValidator_null_and_invalid_handle);
+  RUN_TEST(test_reader_invalid_handle);
+  RUN_TEST(test_type_check_trailing_chars);
+  RUN_TEST(test_persistent_int_defaults_when_next_is_flag);
+  RUN_TEST(test_persistent_arg_as_last_token);
+  RUN_TEST(test_parent_nonpersistent_arg_skipped_in_validation);
+  RUN_TEST(test_subcommand_usage_includes_parent_persistent);
+  RUN_TEST(test_did_you_mean_mixed_case_skips_subcommands);
+  RUN_TEST(test_printHelp_by_name_skips_nonmatching);
+  RUN_TEST(test_tokenizer_edge_cases);
+  RUN_TEST(test_help_long_description_and_multi_alias);
+  RUN_TEST(test_fail_empty_message_no_output);
+
+  // Command-level defensive / overflow branch coverage
+  RUN_TEST(test_add_arg_methods_on_full_pool_return_invalid);
+  RUN_TEST(test_dummy_command_methods_safe);
+  RUN_TEST(test_getArgByName_edge_cases);
+  RUN_TEST(test_getArgByName_parent_fallback_skips_nonpersistent);
+  RUN_TEST(test_command_no_callback_executes_safely);
+  RUN_TEST(test_addArg_null_name);
+  RUN_TEST(test_find_named_skips_positional);
+  RUN_TEST(test_arg_registration_contiguity_guard);
+  RUN_TEST(test_fail_null_message);
+  RUN_TEST(test_setAlias_overflow_all_types);
+  RUN_TEST(test_printHelp_by_name_edge_cases);
+  RUN_TEST(test_builder_handle_isSet_false_when_absent);
+  RUN_TEST(test_usage_string_all_arg_types);
 
   return UNITY_END();
 }
