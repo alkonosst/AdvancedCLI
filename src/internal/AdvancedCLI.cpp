@@ -721,8 +721,13 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
           break;
       }
     }
+
+    // The loop may push write_pos past the buffer (snprintf returns the intended length); clamp
+    // before the final append so it cannot index or size out of bounds.
+    clampWritePos(write_pos, buf_size);
     write_pos +=
       snprintf(buf + write_pos, buf_size - static_cast<size_t>(write_pos), " %s", cmd.getName());
+
   } else {
     write_pos = snprintf(buf, buf_size, "%s", cmd.getName());
   }
