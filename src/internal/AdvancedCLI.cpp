@@ -696,9 +696,8 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
     for (uint8_t i = 0; i < parent._arg_count; ++i) {
       const ArgDef& d = parent._arg_defs[i];
 
-      // GCOVR_EXCL_BR_START: Defensive buffer bound; the write_pos-full arc is dead.
+      // Skip non-persistent parent args; stop writing once the buffer is full.
       if (!d.is_persistent || write_pos >= static_cast<int>(buf_size) - 1) continue;
-      // GCOVR_EXCL_BR_STOP
 
       bool is_opt = !d.is_required;
 
@@ -736,8 +735,8 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
     const ArgDef& arg_def = cmd._arg_defs[i];
     bool is_optional      = !arg_def.is_required;
 
-    // The buffer-full break is never reached in tests.
-    if (write_pos >= static_cast<int>(buf_size) - 1) break; // GCOVR_EXCL_BR_LINE
+    // Stop once the usage string has filled the buffer.
+    if (write_pos >= static_cast<int>(buf_size) - 1) break;
 
     switch (arg_def.type) {
       case ArgType::Flag:
@@ -827,19 +826,16 @@ void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool pr
       for (uint8_t k = 0; k < d.alias_count; ++k) {
         if (k > 0 && alias_idx < 62) aliases[alias_idx++] = ',';
 
-        // The alias-buffer-full arm is never reached in tests.
-        if (alias_idx < 62) aliases[alias_idx++] = '-'; // GCOVR_EXCL_BR_LINE
+        if (alias_idx < 62) aliases[alias_idx++] = '-';
 
-        // The alias-buffer-full arm is never reached in tests.
-        for (uint8_t c = 0; d.aliases[k][c] && alias_idx < 62; ++c) { // GCOVR_EXCL_BR_LINE
+        for (uint8_t c = 0; d.aliases[k][c] && alias_idx < 62; ++c) {
           aliases[alias_idx++] = d.aliases[k][c];
         }
       }
 
-      // The alias-buffer-full arm is never reached in tests.
-      if (alias_idx < 63) aliases[alias_idx++] = ')'; // GCOVR_EXCL_BR_LINE
-
-      aliases[alias_idx] = '\0';
+      // Close the alias list and null-terminate
+      aliases[alias_idx++] = ')';
+      aliases[alias_idx]   = '\0';
     }
 
     const char* type_tag = "";

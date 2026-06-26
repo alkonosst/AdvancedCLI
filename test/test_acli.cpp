@@ -2600,6 +2600,69 @@ static void test_usage_required_flags() {
   TEST_ASSERT_NULL(strstr(cap.buf, "[-f]"));
 }
 
+static void test_usage_string_buffer_truncates() {
+  // A command whose usage string exceeds MAX_INPUT_LEN must truncate safely: the build loop stops
+  // at the buffer bound instead of overflowing.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  // 23-char names (~53 chars of usage each) -> six of them overflow the 256-byte usage buffer.
+  auto& cmd = cli.addCommand("x");
+  cmd.addArg("aaaaaaaaaaaaaaaaaaaaaaa").setRequired(); // required -> forces an error + usage output
+  cmd.addArg("bbbbbbbbbbbbbbbbbbbbbbb");
+  cmd.addArg("ccccccccccccccccccccccc");
+  cmd.addArg("ddddddddddddddddddddddd");
+  cmd.addArg("eeeeeeeeeeeeeeeeeeeeeee");
+  cmd.addArg("fffffffffffffffffffffff");
+  cmd.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("x")); // required arg missing -> error with (truncated) usage
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Usage"));
+}
+
+static void test_alias_display_buffer_truncates() {
+  // An argument with several long aliases overflows the 64-byte alias display buffer; the builder
+  // must stop at the bound instead of overflowing.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  auto& cmd = cli.addCommand("c");
+  cmd.addArg("n")
+    .setAlias("aaaaaaaaaaaaaaaaaaaaaaa") // 23 chars each; MAX_ALIASES (4) of these overflow
+    .setAlias("bbbbbbbbbbbbbbbbbbbbbbb")
+    .setAlias("ccccccccccccccccccccccc")
+    .setAlias("ddddddddddddddddddddddd");
+  cmd.onExecute([](Command&) {});
+
+  cli.printHelp(3); // renders arg lines incl. the alias display -> exercises the truncation
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "-n"));
+}
+
+static void test_subcommand_usage_buffer_truncates() {
+  // A parent with many long-named persistent args builds a sub-command usage string that exceeds
+  // MAX_INPUT_LEN; write_pos is clamped so the final append cannot index/size out of bounds.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  // 23-char persistent names (~53 chars of usage each) -> overflow the 256-byte usage buffer.
+  Command& p = cli.addCommand("p");
+  p.addPersistentArg("aaaaaaaaaaaaaaaaaaaaaaa");
+  p.addPersistentArg("bbbbbbbbbbbbbbbbbbbbbbb");
+  p.addPersistentArg("ccccccccccccccccccccccc");
+  p.addPersistentArg("ddddddddddddddddddddddd");
+  p.addPersistentArg("eeeeeeeeeeeeeeeeeeeeeee");
+  p.addPersistentArg("fffffffffffffffffffffff");
+  Command& s = p.addSubCommand("s");
+  s.addArg("z").setRequired(); // missing -> error forces the (truncated) usage to be emitted
+  s.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("p s")); // -z missing -> error + truncated usage, no overflow
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Usage"));
+}
+
 /* ---------------------------------------------------------------------------------------------- */
 /*                                             Runners                                            */
 /* ---------------------------------------------------------------------------------------------- */
@@ -2843,6 +2906,9 @@ int runUnityTests(void) {
   RUN_TEST(test_negative_number_positional);
   RUN_TEST(test_tokenizer_token_limit);
   RUN_TEST(test_usage_required_flags);
+  RUN_TEST(test_usage_string_buffer_truncates);
+  RUN_TEST(test_alias_display_buffer_truncates);
+  RUN_TEST(test_subcommand_usage_buffer_truncates);
 
   return UNITY_END();
 }
