@@ -104,12 +104,12 @@ void AdvancedCLI::printHelp(uint8_t depth) const {
 
     _printCommandEntry(cmd, 2, depth >= 3);
 
-    if (depth >= 2) {
-      // Print direct sub-commands indented below the parent
-      for (uint16_t j = 0; j < _cmd_count; ++j) {
-        if (_commands[j]._parent_idx == i) {
-          _printCommandEntry(_commands[j], 4, depth >= 3);
-        }
+    if (depth < 2) continue;
+
+    // Print direct sub-commands indented below the parent
+    for (uint16_t j = 0; j < _cmd_count; ++j) {
+      if (_commands[j]._parent_idx == i) {
+        _printCommandEntry(_commands[j], 4, depth >= 3);
       }
     }
   }
@@ -117,59 +117,66 @@ void AdvancedCLI::printHelp(uint8_t depth) const {
 
 void AdvancedCLI::printHelp(const char* cmd_name, uint8_t depth) const {
   if (!cmd_name) return;
+
   for (uint16_t i = 0; i < _cmd_count; ++i) {
     const Command& cmd = _commands[i];
     if (!strEqual(cmd.getName(), cmd_name, _case_sensitive)) continue;
 
     _printCommandEntry(cmd, 2, depth >= 3);
-    if (depth >= 2) {
-      for (uint16_t j = 0; j < _cmd_count; ++j) {
-        if (_commands[j]._parent_idx == i) {
-          _printCommandEntry(_commands[j], 4, depth >= 3);
-        }
+
+    if (depth < 2) return;
+
+    for (uint16_t j = 0; j < _cmd_count; ++j) {
+      if (_commands[j]._parent_idx == i) {
+        _printCommandEntry(_commands[j], 4, depth >= 3);
       }
     }
+
     return;
   }
 }
 
 void AdvancedCLI::printHelp(const Command& cmd, uint8_t depth) const {
   _printCommandEntry(cmd, 2, depth >= 3);
-  if (depth >= 2) {
-    for (uint16_t j = 0; j < _cmd_count; ++j) {
-      if (_commands[j]._parent_idx == cmd._self_idx) {
-        _printCommandEntry(_commands[j], 4, depth >= 3);
-      }
+
+  if (depth < 2) return;
+
+  for (uint16_t j = 0; j < _cmd_count; ++j) {
+    if (_commands[j]._parent_idx == cmd._self_idx) {
+      _printCommandEntry(_commands[j], 4, depth >= 3);
     }
   }
 }
 
 /* ----------------------------------- Inject (unit-testing) ---------------------------------- */
 
-bool AdvancedCLI::inject(const char* input) {
-  parse(input);
-  return _last_parse_ok;
-}
+bool AdvancedCLI::inject(const char* input) { return parse(input); }
 
 #if ACLI_USE_STD_FUNCTION
 bool AdvancedCLI::inject(const char* input, char* output_buf, size_t buf_size) {
   if (!output_buf || buf_size == 0) return inject(input);
+
   output_buf[0]     = '\0';
   size_t captured   = 0;
   OutputFn saved_fn = _output_fn;
-  _output_fn        = [output_buf, buf_size, &captured](const char* str) {
+
+  _output_fn = [output_buf, buf_size, &captured](const char* str) {
     // The capture sink is never invoked with a null string.
     if (!str) return; // GCOVR_EXCL_BR_LINE
 
     size_t remaining = buf_size - 1 - captured;
     if (remaining == 0) return;
+
     size_t str_len  = strlen(str);
     size_t copy_len = str_len < remaining ? str_len : remaining;
     memcpy(output_buf + captured, str, copy_len);
     captured += copy_len;
+
     if (captured < buf_size - 1) output_buf[captured++] = '\n';
+
     output_buf[captured] = '\0';
   };
+
   bool ok    = inject(input);
   _output_fn = saved_fn;
   return ok;
@@ -223,6 +230,7 @@ Command* AdvancedCLI::_findCommand(const char* name, size_t name_len) {
   // Copy token to a null-terminated buffer for comparison
   char name_buf[Config::MAX_NAME_LEN] = {};
   size_t safe_len = name_len < Config::MAX_NAME_LEN - 1 ? name_len : Config::MAX_NAME_LEN - 1;
+
   for (size_t i = 0; i < safe_len; ++i) {
     name_buf[i] = name[i];
   }
@@ -242,6 +250,7 @@ Command* AdvancedCLI::_findSubCommand(const Command* parent, const char* name) {
   if (!parent || !name) return nullptr; // GCOVR_EXCL_BR_LINE
 
   int16_t parent_idx = parent->_self_idx;
+
   for (uint16_t i = 0; i < _cmd_count; ++i) {
     if (_commands[i]._parent_idx == parent_idx &&
         strEqual(_commands[i].getName(), name, _case_sensitive)) {
@@ -261,6 +270,7 @@ uint8_t AdvancedCLI::_tokenize(const char* input, size_t input_len,
     // Skip whitespace
     while (i < input_len && (input[i] == ' ' || input[i] == '\t'))
       ++i;
+
     if (i >= input_len) break;
 
     uint8_t token_idx = 0;
@@ -277,29 +287,27 @@ uint8_t AdvancedCLI::_tokenize(const char* input, size_t input_len,
     while (i < input_len) {
       char current_char = input[i];
 
-      if (quoted) {
-        if ((current_char == '\\') && ((static_cast<size_t>(i) + 1) < input_len)) {
-          // Escape sequence
-          ++i;
-          char escape_char = input[i];
-          if (escape_char == '"')
-            current_char = '"';
-          else if (escape_char == '\'')
-            current_char = '\'';
-          else if (escape_char == '\\')
-            current_char = '\\';
-          else if (escape_char == 'n')
-            current_char = '\n';
-          else if (escape_char == 't')
-            current_char = '\t';
-          else
-            current_char = escape_char;
-        } else if (current_char == quote_char) {
-          ++i; // skip closing quote
-          break;
-        }
-      } else {
-        if (current_char == ' ' || current_char == '\t') break;
+      if (!quoted && (current_char == ' ' || current_char == '\t')) break;
+
+      if ((current_char == '\\') && ((static_cast<size_t>(i) + 1) < input_len)) {
+        // Escape sequence
+        ++i;
+        char escape_char = input[i];
+        if (escape_char == '"')
+          current_char = '"';
+        else if (escape_char == '\'')
+          current_char = '\'';
+        else if (escape_char == '\\')
+          current_char = '\\';
+        else if (escape_char == 'n')
+          current_char = '\n';
+        else if (escape_char == 't')
+          current_char = '\t';
+        else
+          current_char = escape_char;
+      } else if (current_char == quote_char) {
+        ++i; // skip closing quote
+        break;
       }
 
       if (token_idx < Config::MAX_TOKEN_LEN - 1) {
@@ -313,6 +321,7 @@ uint8_t AdvancedCLI::_tokenize(const char* input, size_t input_len,
     // The quoted-empty-token arc is not exercised.
     if (token_idx > 0 || quoted) ++token_count; // GCOVR_EXCL_BR_LINE
   }
+
   return token_count;
 }
 
@@ -336,52 +345,47 @@ void AdvancedCLI::_handleUnknownCommand(const char* token) {
 const char* AdvancedCLI::_suggestCommand(const char* token) const {
   for (uint16_t i = 0; i < _cmd_count; ++i) {
     if (_commands[i]._parent_idx != -1) continue; // skip sub-commands
+
     const char* cmd_name = _commands[i].getName();
     size_t token_len     = strlen(token);
     bool match           = true;
+
     for (size_t j = 0; j < token_len; ++j) {
       char input_char     = token[j];
       char candidate_char = cmd_name[j];
+
       if (!_case_sensitive) {
         if (input_char >= 'A' && input_char <= 'Z') input_char += 32;
         if (candidate_char >= 'A' && candidate_char <= 'Z') candidate_char += 32;
       }
+
       if (input_char != candidate_char || candidate_char == '\0') {
         match = false;
         break;
       }
     }
+
     if (match && token_len > 0) return cmd_name;
   }
+
   return nullptr;
 }
 
 Command* AdvancedCLI::_scanForSubCommand(Command* cmd, const char tokens[][Config::MAX_TOKEN_LEN],
   uint8_t count, uint8_t& start_token) {
   uint8_t t = 1;
+
   while (t < count) {
     const char* tok = tokens[t];
+
     // "--" terminates the persistent-arg scan
     if (tok[0] == '-' && tok[1] == '-' && tok[2] == '\0') break;
 
     // Not every operand arc of the flag test runs in this scan.
     bool is_named_flag = (tok[0] == '-' && !isNumToken(tok)); // GCOVR_EXCL_BR_LINE
 
-    if (is_named_flag) {
-      int16_t def_idx = cmd->_findPersistentArgDefByName(tok);
-      if (def_idx >= 0) {
-        // Skip this persistent arg and its value token (if it is a named, not a flag)
-        const ArgDef& d = cmd->_arg_defs[def_idx];
-        if (d.type == ArgType::Flag) {
-          ++t;
-        } else {
-          t += (t + 1 < count) ? 2 : 1;
-        }
-      } else {
-        break; // non-persistent flag -> stop scan
-      }
-    } else {
-      // Non-flag token: the first one is the sub-command name (if it matches one)
+    // Non-flag token: the first one is the sub-command name (if it matches one)
+    if (!is_named_flag) {
       Command* sub = _findSubCommand(cmd, tok);
       if (sub) {
         start_token = t + 1;
@@ -389,56 +393,76 @@ Command* AdvancedCLI::_scanForSubCommand(Command* cmd, const char tokens[][Confi
       }
       break; // stop scanning regardless
     }
+
+    int16_t def_idx = cmd->_findPersistentArgDefByName(tok);
+    if (def_idx < 0) break; // non-persistent flag -> stop scan
+
+    // Skip this persistent arg and its value token (if it is a named, not a flag)
+    const ArgDef& d = cmd->_arg_defs[def_idx];
+    if (d.type == ArgType::Flag) {
+      ++t;
+    } else {
+      t += (t + 1 < count) ? 2 : 1;
+    }
   }
+
   return nullptr;
 }
 
 void AdvancedCLI::_parsePersistentArgs(Command& parent, const char tokens[][Config::MAX_TOKEN_LEN],
   uint8_t subcmd_token, char* err_msg) {
   uint8_t t = 1;
+
   while (t < subcmd_token) {
     const char* tok = tokens[t];
 
     // Not every operand arc of the flag test runs in this scan.
     bool is_named_flag = (tok[0] == '-' && !isNumToken(tok)); // GCOVR_EXCL_BR_LINE
 
-    if (is_named_flag) {
-      int16_t def_idx = parent._findArgDefByName(tok);
-      if (def_idx >= 0) {
-        ArgDef& d    = parent._arg_defs[def_idx];
-        ParsedArg& p = parent._parsed[def_idx];
-        if (d.type == ArgType::Flag) {
-          p.is_set = true;
-          p.token  = "1";
-          ++t;
-        } else {
-          if (isNextTokenValue(t, subcmd_token, tokens)) {
-            p.is_set = true;
-            p.token  = tokens[t + 1];
-            t += 2;
-          } else if (d.has_default) {
-            p.is_set = true;
-            p.token  = (d.value_type == ArgValueType::Any) ? d.default_value.str : nullptr;
-            ++t;
-          } else {
-            snprintf(err_msg,
-              Config::MAX_INPUT_LEN,
-              "[CLI] Argument \"%s\" expects a value.",
-              d.name);
-            _fireError(parent, err_msg);
-            ++t;
-          }
-        }
-      } else {
-        ++t; // unknown (scan already validated; skip gracefully)
-      }
-    } else {
+    if (!is_named_flag) {
       // Defensive: unreachable in practice. The persistent-arg scan above only advances past flag
       // tokens and their values, so the first non-flag token is always the sub-command boundary
       // (subcmd_token). This branch guards against an infinite loop should that invariant ever be
       // broken.
-      ++t; // GCOVR_EXCL_LINE
+      // GCOVR_EXCL_START
+      ++t;
+      continue;
+      // GCOVR_EXCL_STOP
     }
+
+    int16_t def_idx = parent._findArgDefByName(tok);
+    if (def_idx < 0) {
+      ++t;
+      continue;
+    }
+
+    ArgDef& d    = parent._arg_defs[def_idx];
+    ParsedArg& p = parent._parsed[def_idx];
+
+    if (d.type == ArgType::Flag) {
+      p.is_set = true;
+      p.token  = "1";
+      ++t;
+      continue;
+    }
+
+    if (isNextTokenValue(t, subcmd_token, tokens)) {
+      p.is_set = true;
+      p.token  = tokens[t + 1];
+      t += 2;
+      continue;
+    }
+
+    if (d.has_default) {
+      p.is_set = true;
+      p.token  = (d.value_type == ArgValueType::Any) ? d.default_value.str : nullptr;
+      ++t;
+      continue;
+    }
+
+    snprintf(err_msg, Config::MAX_INPUT_LEN, "[CLI] Argument \"%s\" expects a value.", d.name);
+    _fireError(parent, err_msg);
+    ++t;
   }
 }
 
@@ -464,54 +488,10 @@ void AdvancedCLI::_parseTokens(Command& cmd, const char tokens[][Config::MAX_TOK
     // Not every operand arc of the flag test is exercised.
     bool is_flag = (!positional_only && tok[0] == '-' && !isNumToken(tok)); // GCOVR_EXCL_BR_LINE
 
-    if (is_flag) {
-      int16_t def_idx = cmd._findArgDefByName(tok);
-
-      if (def_idx < 0) {
-        snprintf(err_msg,
-          Config::MAX_INPUT_LEN,
-          "[CLI] Unknown argument: \"%s\" for command \"%s\"",
-          tok,
-          cmd.getName());
-        _fireError(cmd, err_msg);
-        ++t;
-        continue;
-      }
-
-      ArgDef& d    = cmd._arg_defs[def_idx];
-      ParsedArg& p = cmd._parsed[def_idx];
-
-      if (d.type == ArgType::Flag) {
-        p.is_set = true;
-        p.token  = "1"; // static literal, always safe to point to
-        ++t;
-      } else {
-        // Named: next token is the value.
-        // Accept the next token as a value if it does NOT start with '-',
-        // OR if it looks like a negative number (e.g. -5, -3.14).
-        if (isNextTokenValue(t, count, tokens)) {
-          p.is_set = true;
-          p.token  = tokens[t + 1]; // points into static tokens array
-          t += 2;
-        } else if (d.has_default) {
-          // Use default, mark as set.
-          // String defaults: point directly to the literal.
-          // Typed (INT/FLOAT) defaults: leave token null; resolveToken() formats on demand.
-          p.is_set = true;
-          p.token  = (d.value_type == ArgValueType::Any) ? d.default_value.str : nullptr;
-          ++t;
-        } else {
-          snprintf(err_msg,
-            Config::MAX_INPUT_LEN,
-            "[CLI] Argument \"%s\" expects a value.",
-            d.name);
-          _fireError(cmd, err_msg);
-          ++t;
-        }
-      }
-    } else {
-      // Positional
+    // Positional
+    if (!is_flag) {
       int16_t def_idx = cmd._positionalArgIndex(pos_arg_idx);
+
       if (def_idx >= 0) {
         cmd._parsed[def_idx].is_set = true;
         cmd._parsed[def_idx].token  = tok; // points into static tokens array
@@ -520,8 +500,56 @@ void AdvancedCLI::_parseTokens(Command& cmd, const char tokens[][Config::MAX_TOK
         snprintf(err_msg, Config::MAX_INPUT_LEN, "[CLI] Unexpected positional value: \"%s\"", tok);
         _fireError(cmd, err_msg);
       }
+
       ++t;
+      continue;
     }
+
+    int16_t def_idx = cmd._findArgDefByName(tok);
+    if (def_idx < 0) {
+      snprintf(err_msg,
+        Config::MAX_INPUT_LEN,
+        "[CLI] Unknown argument: \"%s\" for command \"%s\"",
+        tok,
+        cmd.getName());
+      _fireError(cmd, err_msg);
+      ++t;
+      continue;
+    }
+
+    ArgDef& d    = cmd._arg_defs[def_idx];
+    ParsedArg& p = cmd._parsed[def_idx];
+
+    if (d.type == ArgType::Flag) {
+      p.is_set = true;
+      p.token  = "1"; // static literal, always safe to point to
+      ++t;
+      continue;
+    }
+
+    // Named: next token is the value.
+    // Accept the next token as a value if it does NOT start with '-',
+    // OR if it looks like a negative number (e.g. -5, -3.14).
+    if (isNextTokenValue(t, count, tokens)) {
+      p.is_set = true;
+      p.token  = tokens[t + 1]; // points into static tokens array
+      t += 2;
+      continue;
+    }
+
+    // Use default, mark as set.
+    // String defaults: point directly to the literal.
+    // Typed (INT/FLOAT) defaults: leave token null; resolveToken() formats on demand.
+    if (d.has_default) {
+      p.is_set = true;
+      p.token  = (d.value_type == ArgValueType::Any) ? d.default_value.str : nullptr;
+      ++t;
+      continue;
+    }
+
+    snprintf(err_msg, Config::MAX_INPUT_LEN, "[CLI] Argument \"%s\" expects a value.", d.name);
+    _fireError(cmd, err_msg);
+    ++t;
   }
 }
 
@@ -596,6 +624,7 @@ void AdvancedCLI::_validateArgs(Command& cmd, const char* usage_buf, char* err_m
 void AdvancedCLI::_validatePersistentArgs(Command& parent, const char* usage_buf, char* err_msg) {
   for (uint16_t i = 0; i < parent._arg_count; ++i) {
     const ArgDef& d = parent._arg_defs[i];
+
     if (!d.is_persistent) continue;
     ParsedArg& p = parent._parsed[i];
 
@@ -610,27 +639,29 @@ void AdvancedCLI::_validatePersistentArgs(Command& parent, const char* usage_buf
     if (d.type == ArgType::Flag) continue;
 
     // Type check
-    if (d.value_type == ArgValueType::Int || d.value_type == ArgValueType::Float) {
-      char* end = nullptr;
-      char pvbuf[24];
-      const char* pv = resolveValue(&p, &d, pvbuf, sizeof(pvbuf));
-      if (d.value_type == ArgValueType::Int) {
-        strtol(pv, &end, 0);
-      } else {
-        strtod(pv, &end);
-      }
-      // Not all operand arcs of the type-OK test are taken.
-      const bool typeOk = (end != nullptr && end != pv && *end == '\0'); // GCOVR_EXCL_BR_LINE
+    if (d.value_type != ArgValueType::Int && d.value_type != ArgValueType::Float) continue;
 
-      if (!typeOk) {
-        char reason[48];
-        snprintf(reason,
-          sizeof(reason),
-          "expected %s, got \"%s\"",
-          d.value_type == ArgValueType::Int ? "integer" : "number",
-          pv);
-        _fireInvalid(parent, d, pv, reason, usage_buf);
-      }
+    char* end = nullptr;
+    char pvbuf[24];
+    const char* pv = resolveValue(&p, &d, pvbuf, sizeof(pvbuf));
+
+    if (d.value_type == ArgValueType::Int) {
+      strtol(pv, &end, 0);
+    } else {
+      strtod(pv, &end);
+    }
+
+    // Not all operand arcs of the type-OK test are taken.
+    const bool typeOk = (end != nullptr && end != pv && *end == '\0'); // GCOVR_EXCL_BR_LINE
+
+    if (!typeOk) {
+      char reason[48];
+      snprintf(reason,
+        sizeof(reason),
+        "expected %s, got \"%s\"",
+        d.value_type == ArgValueType::Int ? "integer" : "number",
+        pv);
+      _fireInvalid(parent, d, pv, reason, usage_buf);
     }
   }
 }
@@ -682,6 +713,7 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
             is_opt ? " [-%s]" : " -%s",
             d.name); // GCOVR_EXCL_BR_LINE - Only the optional ternary arm is exercised.
           break;
+
         case ArgType::Named:
           write_pos += snprintf(buf + write_pos,
             buf_size - static_cast<size_t>(write_pos),
@@ -689,6 +721,7 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
             d.name,
             d.name);
           break;
+
         default: break;
       }
     }
@@ -749,21 +782,24 @@ void AdvancedCLI::_fireInvalid(Command& cmd, const ArgDef& arg_def, const char* 
 
 void AdvancedCLI::_fireError(Command& cmd, const char* message, const char* usage_str) {
   _last_parse_ok = false;
+
   if (cmd._error_callback) {
     // message is always non-null when an error callback is set.
     cmd._error_callback(cmd, message ? message : ""); // GCOVR_EXCL_BR_LINE
-  } else {
-    // message is always a non-empty string here.
-    if (message && message[0]) _output(message); // GCOVR_EXCL_BR_LINE
-
-    // Not all usage_str null/empty arcs are exercised.
-    if (usage_str && usage_str[0]) _outputf("      Usage: %s", usage_str); // GCOVR_EXCL_BR_LINE
+    return;
   }
+
+  // message is always a non-empty string here.
+  if (message && message[0]) _output(message); // GCOVR_EXCL_BR_LINE
+
+  // Not all usage_str null/empty arcs are exercised.
+  if (usage_str && usage_str[0]) _outputf("      Usage: %s", usage_str); // GCOVR_EXCL_BR_LINE
 }
 
 void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool print_args) const {
   // Build indent string
   char pad[12] = {};
+
   for (uint8_t k = 0; k < indent && k < 11; ++k)
     pad[k] = ' ';
 
@@ -784,8 +820,10 @@ void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool pr
     // Build alias string: "(-a, -b)"
     char aliases[64]  = {};
     uint8_t alias_idx = 0;
+
     if (d.alias_count > 0) {
       aliases[alias_idx++] = '(';
+
       for (uint8_t k = 0; k < d.alias_count; ++k) {
         if (k > 0 && alias_idx < 62) aliases[alias_idx++] = ',';
 
@@ -797,6 +835,7 @@ void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool pr
           aliases[alias_idx++] = d.aliases[k][c];
         }
       }
+
       // The alias-buffer-full arm is never reached in tests.
       if (alias_idx < 63) aliases[alias_idx++] = ')'; // GCOVR_EXCL_BR_LINE
 
@@ -810,6 +849,7 @@ void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool pr
       case ArgType::Flag: type_tag = "[flag ]"; break;
       case ArgType::Named: type_tag = "[named]"; break;
       case ArgType::Positional: type_tag = "[pos  ]"; break;
+      default: break;
     }
 
     char line[Config::MAX_DESC_LEN * 2] = {};
