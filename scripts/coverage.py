@@ -31,6 +31,8 @@ env.AddCustomTarget(
         "gcovr --root . --filter src/ .pio/build/"
         + env_name
         + " --print-summary"
+        + " --exclude-unreachable-branches"
+        + " --exclude-throw-branches"
         + " --xml coverage/coverage.xml --html-details coverage/index.html",
     ],
     title="Local coverage report",
