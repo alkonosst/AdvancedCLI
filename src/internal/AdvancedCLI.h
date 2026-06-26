@@ -247,6 +247,18 @@ class AdvancedCLI {
   uint8_t _tokenize(const char* input, size_t input_len, char tokens[][Config::MAX_TOKEN_LEN],
     uint8_t max_tokens) const;
 
+  // parse() phase helpers
+  void _handleUnknownCommand(const char* token);
+  const char* _suggestCommand(const char* token) const;
+  Command* _scanForSubCommand(Command* cmd, const char tokens[][Config::MAX_TOKEN_LEN],
+    uint8_t count, uint8_t& start_token);
+  void _parsePersistentArgs(Command& parent, const char tokens[][Config::MAX_TOKEN_LEN],
+    uint8_t subcmd_token, char* err_msg);
+  void _parseTokens(Command& cmd, const char tokens[][Config::MAX_TOKEN_LEN], uint8_t count,
+    uint8_t start_token, char* err_msg);
+  void _validateArgs(Command& cmd, const char* usage_buf, char* err_msg);
+  void _validatePersistentArgs(Command& parent, const char* usage_buf, char* err_msg);
+
   void _output(const char* str) const;
   void _outputf(const char* fmt, ...) const;
 

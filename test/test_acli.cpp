@@ -1860,11 +1860,14 @@ static void test_did_you_mean_suggestion() {
 
 static void test_unknown_argument_main_loop_fails() {
   AdvancedCLI cli;
-  auto& cmd = cli.addCommand("cmd");
+  bool called = false;
+  auto& cmd   = cli.addCommand("cmd");
   cmd.addArg("known");
-  cmd.onExecute([](Command&) {});
+  cmd.onExecute([&](Command&) { called = true; });
 
+  // An unknown argument must fail the parse AND prevent the callback from executing.
   TEST_ASSERT_FALSE(cli.inject("cmd --bogus"));
+  TEST_ASSERT_FALSE(called);
 }
 
 static void test_named_arg_uses_default_when_value_absent() {
@@ -1890,11 +1893,27 @@ static void test_named_arg_uses_default_when_value_absent() {
 
 static void test_named_arg_expects_value_error() {
   AdvancedCLI cli;
-  auto& cmd = cli.addCommand("cmd");
+  bool called = false;
+  auto& cmd   = cli.addCommand("cmd");
   cmd.addArg("x"); // no default
-  cmd.onExecute([](Command&) {});
+  cmd.onExecute([&](Command&) { called = true; });
 
+  // A named arg with no value and no default must fail the parse AND not execute.
   TEST_ASSERT_FALSE(cli.inject("cmd --x"));
+  TEST_ASSERT_FALSE(called);
+}
+
+static void test_unexpected_positional_does_not_execute() {
+  // A surplus positional must fail the parse AND prevent the command callback from executing.
+  AdvancedCLI cli;
+  bool called  = false;
+  Command& cmd = cli.addCommand("copy");
+  cmd.addPosArg("src");
+  cmd.addPosArg("dst");
+  cmd.onExecute([&](Command&) { called = true; });
+
+  TEST_ASSERT_FALSE(cli.inject("copy a b c")); // 'c' has no positional slot
+  TEST_ASSERT_FALSE(called);
 }
 
 static void test_type_check_errors_main_loop() {
@@ -1942,12 +1961,15 @@ static void test_persistent_named_defaults_when_next_is_flag() {
 static void test_persistent_named_missing_value_errors() {
   // A persistent named arg with no value and no default reports an error.
   AdvancedCLI cli;
-  Command& joy = cli.addCommand("joy");
+  bool cal_called = false;
+  Command& joy    = cli.addCommand("joy");
   joy.addPersistentArg("a"); // no default
   joy.addPersistentFlag("b");
-  joy.addSubCommand("cal").onExecute([](Command&) {});
+  joy.addSubCommand("cal").onExecute([&](Command&) { cal_called = true; });
 
+  // The persistent-arg error must fail the parse AND prevent the sub-command from executing.
   TEST_ASSERT_FALSE(cli.inject("joy -a -b cal"));
+  TEST_ASSERT_FALSE(cal_called);
 }
 
 static void test_persistent_unknown_flag_skipped() {
@@ -2507,6 +2529,140 @@ static void test_usage_string_all_arg_types() {
   TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Usage"));
 }
 
+static void test_dash_only_token_not_an_arg() {
+  // A bare "-" token strips to an empty arg name, so it matches no argument and is reported as
+  // unknown; the command callback must not run.
+  AdvancedCLI cli;
+  bool called = false;
+
+  auto& cmd = cli.addCommand("dev");
+  cmd.addFlag("v"); // a named arg so the lookup actually compares "-" against a definition
+  cmd.onExecute([&](Command&) { called = true; });
+
+  TEST_ASSERT_FALSE(cli.inject("dev -"));
+  TEST_ASSERT_FALSE(called);
+}
+
+static void test_negative_number_positional() {
+  // A negative number given as a positional value (not after a named arg) is a value, not a flag.
+  // Exercises the is-negative-number arc of the flag detection in both the sub-command scan and
+  // the token parser.
+  AdvancedCLI cli;
+  ArgInt h;
+  int32_t got = 0;
+
+  auto& cmd = cli.addCommand("temp");
+  h         = cmd.addPosIntArg("delta");
+  cmd.onExecute([&](Command& c) { got = c.getArg(h).getValue(); });
+
+  TEST_ASSERT_TRUE(cli.inject("temp -7"));
+  TEST_ASSERT_EQUAL(-7, got);
+}
+
+static void test_tokenizer_token_limit() {
+  // Feeding more than MAX_TOKENS whitespace-separated tokens must not overflow the token table:
+  // the tokenizer stops at the limit and the CLI stays usable afterwards.
+  AdvancedCLI cli;
+  cli.addCommand("noop").onExecute([](Command&) {});
+
+  char line[Config::MAX_INPUT_LEN] = "noop";
+  size_t pos                       = strlen(line);
+  for (uint8_t k = 0; k < Config::MAX_TOKENS + 5; ++k) {
+    line[pos++] = ' ';
+    line[pos++] = 'a';
+  }
+  line[pos] = '\0';
+
+  // noop takes no positionals, so the extra tokens are unexpected -> parse fails gracefully.
+  TEST_ASSERT_FALSE(cli.inject(line));
+  TEST_ASSERT_TRUE(cli.inject("noop")); // still works -> no state corruption
+}
+
+static void test_usage_required_flags() {
+  // Required flags render unbracketed ("-f") instead of optional ("[-f]") in usage strings, for
+  // both a command's own flag and a parent's persistent flag.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  Command& dev = cli.addCommand("dev");
+  dev.addPersistentFlag("g").setRequired(); // required persistent flag -> parent branch
+  Command& run = dev.addSubCommand("run");
+  run.addFlag("f").setRequired(); // required flag -> main branch
+  run.addArg("x").setRequired();  // missing -> forces an error so usage is emitted
+  run.onExecute([](Command&) {});
+
+  // -g and -f are provided; -x is missing -> error with usage. Both flags appear unbracketed.
+  TEST_ASSERT_FALSE(cli.inject("dev -g run -f"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, " -g"));
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, " -f"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "[-g]"));
+  TEST_ASSERT_NULL(strstr(cap.buf, "[-f]"));
+}
+
+static void test_usage_string_buffer_truncates() {
+  // A command whose usage string exceeds MAX_INPUT_LEN must truncate safely: the build loop stops
+  // at the buffer bound instead of overflowing.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  // 23-char names (~53 chars of usage each) -> six of them overflow the 256-byte usage buffer.
+  auto& cmd = cli.addCommand("x");
+  cmd.addArg("aaaaaaaaaaaaaaaaaaaaaaa").setRequired(); // required -> forces an error + usage output
+  cmd.addArg("bbbbbbbbbbbbbbbbbbbbbbb");
+  cmd.addArg("ccccccccccccccccccccccc");
+  cmd.addArg("ddddddddddddddddddddddd");
+  cmd.addArg("eeeeeeeeeeeeeeeeeeeeeee");
+  cmd.addArg("fffffffffffffffffffffff");
+  cmd.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("x")); // required arg missing -> error with (truncated) usage
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Usage"));
+}
+
+static void test_alias_display_buffer_truncates() {
+  // An argument with several long aliases overflows the 64-byte alias display buffer; the builder
+  // must stop at the bound instead of overflowing.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  auto& cmd = cli.addCommand("c");
+  cmd.addArg("n")
+    .setAlias("aaaaaaaaaaaaaaaaaaaaaaa") // 23 chars each; MAX_ALIASES (4) of these overflow
+    .setAlias("bbbbbbbbbbbbbbbbbbbbbbb")
+    .setAlias("ccccccccccccccccccccccc")
+    .setAlias("ddddddddddddddddddddddd");
+  cmd.onExecute([](Command&) {});
+
+  cli.printHelp(3); // renders arg lines incl. the alias display -> exercises the truncation
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "-n"));
+}
+
+static void test_subcommand_usage_buffer_truncates() {
+  // A parent with many long-named persistent args builds a sub-command usage string that exceeds
+  // MAX_INPUT_LEN; write_pos is clamped so the final append cannot index/size out of bounds.
+  AdvancedCLI cli;
+  OutputCapture cap;
+  cli.setOutput(cap.fn());
+
+  // 23-char persistent names (~53 chars of usage each) -> overflow the 256-byte usage buffer.
+  Command& p = cli.addCommand("p");
+  p.addPersistentArg("aaaaaaaaaaaaaaaaaaaaaaa");
+  p.addPersistentArg("bbbbbbbbbbbbbbbbbbbbbbb");
+  p.addPersistentArg("ccccccccccccccccccccccc");
+  p.addPersistentArg("ddddddddddddddddddddddd");
+  p.addPersistentArg("eeeeeeeeeeeeeeeeeeeeeee");
+  p.addPersistentArg("fffffffffffffffffffffff");
+  Command& s = p.addSubCommand("s");
+  s.addArg("z").setRequired(); // missing -> error forces the (truncated) usage to be emitted
+  s.onExecute([](Command&) {});
+
+  TEST_ASSERT_FALSE(cli.inject("p s")); // -z missing -> error + truncated usage, no overflow
+  TEST_ASSERT_NOT_NULL(strstr(cap.buf, "Usage"));
+}
+
 /* ---------------------------------------------------------------------------------------------- */
 /*                                             Runners                                            */
 /* ---------------------------------------------------------------------------------------------- */
@@ -2698,6 +2854,7 @@ int runUnityTests(void) {
   RUN_TEST(test_unknown_argument_main_loop_fails);
   RUN_TEST(test_named_arg_uses_default_when_value_absent);
   RUN_TEST(test_named_arg_expects_value_error);
+  RUN_TEST(test_unexpected_positional_does_not_execute);
   RUN_TEST(test_type_check_errors_main_loop);
   RUN_TEST(test_persistent_type_check_errors);
   RUN_TEST(test_persistent_named_defaults_when_next_is_flag);
@@ -2745,6 +2902,13 @@ int runUnityTests(void) {
   RUN_TEST(test_printHelp_by_name_edge_cases);
   RUN_TEST(test_builder_handle_isSet_false_when_absent);
   RUN_TEST(test_usage_string_all_arg_types);
+  RUN_TEST(test_dash_only_token_not_an_arg);
+  RUN_TEST(test_negative_number_positional);
+  RUN_TEST(test_tokenizer_token_limit);
+  RUN_TEST(test_usage_required_flags);
+  RUN_TEST(test_usage_string_buffer_truncates);
+  RUN_TEST(test_alias_display_buffer_truncates);
+  RUN_TEST(test_subcommand_usage_buffer_truncates);
 
   return UNITY_END();
 }
