@@ -1860,11 +1860,14 @@ static void test_did_you_mean_suggestion() {
 
 static void test_unknown_argument_main_loop_fails() {
   AdvancedCLI cli;
-  auto& cmd = cli.addCommand("cmd");
+  bool called = false;
+  auto& cmd   = cli.addCommand("cmd");
   cmd.addArg("known");
-  cmd.onExecute([](Command&) {});
+  cmd.onExecute([&](Command&) { called = true; });
 
+  // An unknown argument must fail the parse AND prevent the callback from executing.
   TEST_ASSERT_FALSE(cli.inject("cmd --bogus"));
+  TEST_ASSERT_FALSE(called);
 }
 
 static void test_named_arg_uses_default_when_value_absent() {
@@ -1890,11 +1893,27 @@ static void test_named_arg_uses_default_when_value_absent() {
 
 static void test_named_arg_expects_value_error() {
   AdvancedCLI cli;
-  auto& cmd = cli.addCommand("cmd");
+  bool called = false;
+  auto& cmd   = cli.addCommand("cmd");
   cmd.addArg("x"); // no default
-  cmd.onExecute([](Command&) {});
+  cmd.onExecute([&](Command&) { called = true; });
 
+  // A named arg with no value and no default must fail the parse AND not execute.
   TEST_ASSERT_FALSE(cli.inject("cmd --x"));
+  TEST_ASSERT_FALSE(called);
+}
+
+static void test_unexpected_positional_does_not_execute() {
+  // A surplus positional must fail the parse AND prevent the command callback from executing.
+  AdvancedCLI cli;
+  bool called  = false;
+  Command& cmd = cli.addCommand("copy");
+  cmd.addPosArg("src");
+  cmd.addPosArg("dst");
+  cmd.onExecute([&](Command&) { called = true; });
+
+  TEST_ASSERT_FALSE(cli.inject("copy a b c")); // 'c' has no positional slot
+  TEST_ASSERT_FALSE(called);
 }
 
 static void test_type_check_errors_main_loop() {
@@ -1942,12 +1961,15 @@ static void test_persistent_named_defaults_when_next_is_flag() {
 static void test_persistent_named_missing_value_errors() {
   // A persistent named arg with no value and no default reports an error.
   AdvancedCLI cli;
-  Command& joy = cli.addCommand("joy");
+  bool cal_called = false;
+  Command& joy    = cli.addCommand("joy");
   joy.addPersistentArg("a"); // no default
   joy.addPersistentFlag("b");
-  joy.addSubCommand("cal").onExecute([](Command&) {});
+  joy.addSubCommand("cal").onExecute([&](Command&) { cal_called = true; });
 
+  // The persistent-arg error must fail the parse AND prevent the sub-command from executing.
   TEST_ASSERT_FALSE(cli.inject("joy -a -b cal"));
+  TEST_ASSERT_FALSE(cal_called);
 }
 
 static void test_persistent_unknown_flag_skipped() {
@@ -2698,6 +2720,7 @@ int runUnityTests(void) {
   RUN_TEST(test_unknown_argument_main_loop_fails);
   RUN_TEST(test_named_arg_uses_default_when_value_absent);
   RUN_TEST(test_named_arg_expects_value_error);
+  RUN_TEST(test_unexpected_positional_does_not_execute);
   RUN_TEST(test_type_check_errors_main_loop);
   RUN_TEST(test_persistent_type_check_errors);
   RUN_TEST(test_persistent_named_defaults_when_next_is_flag);

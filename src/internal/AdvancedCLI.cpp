@@ -261,8 +261,8 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
     }
   }
 
-  // Validate: required args, type check, range, oneOf
-  bool valid = true;
+  // _last_parse_ok is the single source of truth: _fireError() / _fireInvalid() set it false on any
+  // error (parse phase or validation phase), and it gates execution below.
   static char usage_buf[Config::MAX_INPUT_LEN];
   _buildUsageStr(*cmd, usage_buf, sizeof(usage_buf));
 
@@ -274,7 +274,6 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
     if (d.is_required && !p.is_set) {
       snprintf(err_msg, sizeof(err_msg), "[CLI] Required argument missing: \"-%s\"", d.name);
       _fireError(*cmd, err_msg, usage_buf);
-      valid = false;
       continue;
     }
 
@@ -307,7 +306,6 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
           d.value_type == ArgValueType::Int ? "integer" : "number",
           pv);
         _fireInvalid(*cmd, d, pv, reason, usage_buf);
-        valid = false;
         continue;
       }
 
@@ -315,7 +313,6 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
 #if ACLI_ENABLE_VALIDATION_FN
       if (hasValidator(d) && !callValidator(d, pv)) {
         _fireInvalid(*cmd, d, pv, "rejected by validation function", usage_buf);
-        valid = false;
         continue;
       }
 #endif
@@ -330,7 +327,6 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
       const char* pv = resolveValue(&p, &d, pvbuf3, sizeof(pvbuf3));
       if (!callValidator(d, pv)) {
         _fireInvalid(*cmd, d, pv, "rejected by validation function", usage_buf);
-        valid = false;
       }
     }
 #endif
@@ -347,7 +343,6 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
       if (d.is_required && !p.is_set) {
         snprintf(err_msg, sizeof(err_msg), "[CLI] Required argument missing: \"-%s\"", d.name);
         _fireError(*parent_cmd, err_msg, usage_buf);
-        valid = false;
         continue;
       }
 
@@ -375,16 +370,13 @@ bool AdvancedCLI::parse(const char* input, size_t len) {
             d.value_type == ArgValueType::Int ? "integer" : "number",
             pv);
           _fireInvalid(*parent_cmd, d, pv, reason, usage_buf);
-          valid = false;
         }
       }
     }
   }
 
-  if (!valid) {
-    _last_parse_ok = false;
-    return _last_parse_ok;
-  }
+  // Do not run the command callback if any parse or validation errors occurred.
+  if (!_last_parse_ok) return _last_parse_ok;
 
   // Execute callback
   cmd->_execute();
