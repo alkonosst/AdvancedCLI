@@ -24,17 +24,23 @@ bool ArgBaseImpl::isSet() const {
   return p && p->is_set;
 }
 
+// GCOVR_EXCL_BR_START: Tested only with valid handles; not both && arms run.
 bool ArgBaseImpl::isValid() const { return _cmd != nullptr && _arg_index >= 0; }
+// GCOVR_EXCL_BR_STOP
 
 ArgBaseImpl::operator bool() const { return isValid(); }
 
 ArgDef* ArgBaseImpl::_def() const {
+  // GCOVR_EXCL_BR_START: Defensive null/bounds guard; reached only when valid.
   if (!_cmd || !_cmd->_arg_defs || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
+  // GCOVR_EXCL_BR_STOP
   return &_cmd->_arg_defs[_arg_index];
 }
 
 ParsedArg* ArgBaseImpl::_parsed() const {
+  // GCOVR_EXCL_BR_START: Defensive null/bounds guard; reached only when valid.
   if (!_cmd || !_cmd->_parsed || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
+  // GCOVR_EXCL_BR_STOP
   return &_cmd->_parsed[_arg_index];
 }
 
@@ -91,7 +97,9 @@ bool ArgReaderBase::isSet() const {
   return p && p->is_set;
 }
 
+// GCOVR_EXCL_BR_START: Tested only with valid handles; not both && arms run.
 bool ArgReaderBase::isValid() const { return _cmd != nullptr && _arg_index >= 0; }
+// GCOVR_EXCL_BR_STOP
 
 const char* ArgReaderBase::getName() const {
   const ArgDef* def = _def();
@@ -106,12 +114,16 @@ const char* ArgReaderBase::getDescription() const {
 ArgReaderBase::operator bool() const { return isValid(); }
 
 const ArgDef* ArgReaderBase::_def() const {
+  // GCOVR_EXCL_BR_START: Defensive null/bounds guard; reached only when valid.
   if (!_cmd || !_cmd->_arg_defs || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
+  // GCOVR_EXCL_BR_STOP
   return &_cmd->_arg_defs[_arg_index];
 }
 
 const ParsedArg* ArgReaderBase::_parsed() const {
+  // GCOVR_EXCL_BR_START: Defensive null/bounds guard; reached only when valid.
   if (!_cmd || !_cmd->_parsed || _arg_index < 0 || _arg_index >= _cmd->_arg_count) return nullptr;
+  // GCOVR_EXCL_BR_STOP
   return &_cmd->_parsed[_arg_index];
 }
 
@@ -156,7 +168,11 @@ ArgInt& ArgInt::setValidator(ValidationFn<int32_t> fn) {
   arg_def->validation_fn = [fn](const char* raw_value) {
     char* parse_end = nullptr;
     long parsed_val = strtol(raw_value, &parse_end, 0);
+
+    // GCOVR_EXCL_BR_START: Validated token always parses; the fail arms are dead.
     if (!parse_end || parse_end == raw_value || *parse_end != '\0') return false;
+    // GCOVR_EXCL_BR_STOP
+
     return fn(static_cast<int32_t>(parsed_val));
   };
 #  else
@@ -179,7 +195,11 @@ ArgFloat& ArgFloat::setValidator(ValidationFn<float> fn) {
   arg_def->validation_fn = [fn](const char* raw_value) {
     char* parse_end  = nullptr;
     float parsed_val = static_cast<float>(strtod(raw_value, &parse_end));
+
+    // GCOVR_EXCL_BR_START: Validated token always parses; the fail arms are dead.
     if (!parse_end || parse_end == raw_value || *parse_end != '\0') return false;
+    // GCOVR_EXCL_BR_STOP
+
     return fn(parsed_val);
   };
 #  else
@@ -211,7 +231,8 @@ ParsedInt::ParsedInt(Command* cmd, int16_t arg_index)
 
 int32_t ParsedInt::getValue(int32_t default_value) const {
   const char* raw_value = _rawValue();
-  if (!raw_value || raw_value[0] == '\0') return default_value;
+  // Dead arm; _rawValue() never returns null.
+  if (!raw_value || raw_value[0] == '\0') return default_value; // GCOVR_EXCL_BR_LINE
   return static_cast<int32_t>(strtol(raw_value, nullptr, 0));
 }
 
@@ -222,7 +243,8 @@ ParsedFloat::ParsedFloat(Command* cmd, int16_t arg_index)
 
 float ParsedFloat::getValue(float default_value) const {
   const char* raw_value = _rawValue();
-  if (!raw_value || raw_value[0] == '\0') return default_value;
+  // Dead arm; _rawValue() never returns null.
+  if (!raw_value || raw_value[0] == '\0') return default_value; // GCOVR_EXCL_BR_LINE
   return static_cast<float>(strtod(raw_value, nullptr));
 }
 

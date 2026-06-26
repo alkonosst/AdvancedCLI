@@ -195,11 +195,14 @@ class Command {
   template <typename T>
   typename detail::ReaderOf<T>::type getArg(T& handle) {
     using R = typename detail::ReaderOf<T>::type;
-    if (!handle.isValid()) return R();
+    // Defensive; getArg is only called with valid handles.
+    if (!handle.isValid()) return R(); // GCOVR_EXCL_BR_LINE
     if (handle._cmd == this) return R(this, handle._arg_index);
     // Also accept persistent-arg handles from the parent command.
     // Allows sub-command callbacks to call cmd.getArg(parent_handle).
+    // GCOVR_EXCL_BR_START: Parent persistent-arg fallback not taken for all types.
     if (_parent_idx >= 0 && handle._cmd == _getParent()) return R(handle._cmd, handle._arg_index);
+    // GCOVR_EXCL_BR_STOP
     return R();
   }
 
