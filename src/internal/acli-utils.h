@@ -44,8 +44,8 @@ inline bool matchArgName(const ArgDef& arg_def, const char* token, bool case_sen
   while (*token == '-')
     ++token;
 
-  // Defensive; an empty (post-dash) token never reaches here.
-  if (*token == '\0') return false; // GCOVR_EXCL_BR_LINE
+  // A token consisting only of dashes (e.g. a bare "-") strips to empty here.
+  if (*token == '\0') return false;
 
   if (strEqual(arg_def.name, token, case_sensitive)) return true;
   for (uint8_t i = 0; i < arg_def.alias_count; ++i) {

@@ -265,8 +265,7 @@ uint8_t AdvancedCLI::_tokenize(const char* input, size_t input_len,
   uint8_t token_count = 0;
   uint16_t i          = 0; // uint16_t: input_len can be up to MAX_INPUT_LEN-1 (255)
 
-  // The max_tokens exit arm is never taken in tests.
-  while (i < input_len && token_count < max_tokens) { // GCOVR_EXCL_BR_LINE
+  while (i < input_len && token_count < max_tokens) {
     // Skip whitespace
     while (i < input_len && (input[i] == ' ' || input[i] == '\t'))
       ++i;
@@ -381,8 +380,7 @@ Command* AdvancedCLI::_scanForSubCommand(Command* cmd, const char tokens[][Confi
     // "--" terminates the persistent-arg scan
     if (tok[0] == '-' && tok[1] == '-' && tok[2] == '\0') break;
 
-    // Not every operand arc of the flag test runs in this scan.
-    bool is_named_flag = (tok[0] == '-' && !isNumToken(tok)); // GCOVR_EXCL_BR_LINE
+    bool is_named_flag = (tok[0] == '-' && !isNumToken(tok));
 
     // Non-flag token: the first one is the sub-command name (if it matches one)
     if (!is_named_flag) {
@@ -485,8 +483,7 @@ void AdvancedCLI::_parseTokens(Command& cmd, const char tokens[][Config::MAX_TOK
 
     // A token is a flag/arg-name reference when it starts with '-' but is NOT a negative number.
     // Negative numbers: -5, -3.14, -.5  ->  second char is a digit or '.'
-    // Not every operand arc of the flag test is exercised.
-    bool is_flag = (!positional_only && tok[0] == '-' && !isNumToken(tok)); // GCOVR_EXCL_BR_LINE
+    bool is_flag = (!positional_only && tok[0] == '-' && !isNumToken(tok));
 
     // Positional
     if (!is_flag) {
@@ -705,24 +702,23 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
 
       bool is_opt = !d.is_required;
 
-      // Exhaustive switch; the unused-case fall-through never runs.
-      switch (d.type) { // GCOVR_EXCL_BR_LINE
+      // Persistent args are only ever Flag or Named; Named is the default arm so the switch has
+      // no unreachable synthetic case.
+      switch (d.type) {
         case ArgType::Flag:
           write_pos += snprintf(buf + write_pos,
             buf_size - static_cast<size_t>(write_pos),
             is_opt ? " [-%s]" : " -%s",
-            d.name); // GCOVR_EXCL_BR_LINE - Only the optional ternary arm is exercised.
+            d.name);
           break;
 
-        case ArgType::Named:
+        default: // Named
           write_pos += snprintf(buf + write_pos,
             buf_size - static_cast<size_t>(write_pos),
             is_opt ? " [-%s <%s>]" : " -%s <%s>",
             d.name,
             d.name);
           break;
-
-        default: break;
       }
     }
     write_pos +=
@@ -738,13 +734,12 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
     // The buffer-full break is never reached in tests.
     if (write_pos >= static_cast<int>(buf_size) - 1) break; // GCOVR_EXCL_BR_LINE
 
-    // Exhaustive switch; the unused-case fall-through never runs.
-    switch (arg_def.type) { // GCOVR_EXCL_BR_LINE
+    switch (arg_def.type) {
       case ArgType::Flag:
         write_pos += snprintf(buf + write_pos,
           buf_size - static_cast<size_t>(write_pos),
           is_optional ? " [-%s]" : " -%s",
-          arg_def.name); // GCOVR_EXCL_BR_LINE - Only the optional ternary arm is exercised.
+          arg_def.name);
         break;
 
       case ArgType::Named:
@@ -755,7 +750,7 @@ void AdvancedCLI::_buildUsageStr(const Command& cmd, char* buf, size_t buf_size)
           arg_def.name);
         break;
 
-      case ArgType::Positional:
+      default: // Positional
         write_pos += snprintf(buf + write_pos,
           buf_size - static_cast<size_t>(write_pos),
           is_optional ? " [<%s>]" : " <%s>",
@@ -844,12 +839,10 @@ void AdvancedCLI::_printCommandEntry(const Command& cmd, uint8_t indent, bool pr
 
     const char* type_tag = "";
 
-    // Exhaustive switch; the unused-case fall-through never runs.
-    switch (d.type) { // GCOVR_EXCL_BR_LINE
+    switch (d.type) {
       case ArgType::Flag: type_tag = "[flag ]"; break;
       case ArgType::Named: type_tag = "[named]"; break;
-      case ArgType::Positional: type_tag = "[pos  ]"; break;
-      default: break;
+      default: type_tag = "[pos  ]"; break; // Positional
     }
 
     char line[Config::MAX_DESC_LEN * 2] = {};
