@@ -21,4 +21,7 @@ ContinuationIndentWidth: 2
 IndentCaseLabels: true
 IndentPPDirectives: AfterHash
 PointerAlignment: Left
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+	AfterRequiresInClause: true
 ...

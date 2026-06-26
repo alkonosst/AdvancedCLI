@@ -1,4 +1,6 @@
-.github/copilot-instructions.md
 .pio
 .vscode
+build
+coverage
 logs
+CLAUDE.md
