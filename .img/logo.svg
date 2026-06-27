@@ -33,15 +33,12 @@
         font-size="9" fill="#6e7681">Serial Monitor  -  115200 baud</text>
 
   <!-- Library name -->
-  <text x="16" y="54"
+  <text x="16" y="60"
         font-family="'Courier New', Courier, monospace"
         font-size="19" font-weight="bold" fill="#38bdf8">Advanced</text>
-  <text x="16" y="74"
+  <text x="16" y="80"
         font-family="'Courier New', Courier, monospace"
         font-size="19" font-weight="bold" fill="#4ade80">CLI</text>
-  <text x="16" y="84"
-        font-family="'Courier New', Courier, monospace"
-        font-size="7" fill="#484f58" letter-spacing="1.5">for Arduino</text>
 
   <!-- Separator -->
   <line x1="16" y1="92" x2="150" y2="92" stroke="#21262d" stroke-width="1"/>
