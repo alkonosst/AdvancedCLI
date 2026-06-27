@@ -2,7 +2,11 @@ cmake_minimum_required(VERSION 3.14)
 project(AdvancedCLI VERSION 0.6.0 LANGUAGES CXX)
 
 # Add sources to the library target.
-add_library(AdvancedCLI STATIC src/AdvancedCLI.cpp)
+add_library(AdvancedCLI STATIC
+  src/internal/AdvancedCLI.cpp
+  src/internal/acli-argument.cpp
+  src/internal/acli-command.cpp
+)
 
 # Alias with author prefix. Consumers link "alkonosst::AdvancedCLI".
 add_library(alkonosst::AdvancedCLI ALIAS AdvancedCLI)

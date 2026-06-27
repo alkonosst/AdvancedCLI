@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <b>A modern command-line parsing library for Arduino with zero dynamic memory allocation.</b>
+  <b>A modern command-line parsing C++ library for embedded and native.</b>
 </p>
 
 <p align="center">
@@ -16,6 +16,9 @@
     <img src="https://badges.registry.platformio.org/packages/alkonosst/library/AdvancedCLI.svg" alt="PlatformIO Registry">
   </a>
   <br><br>
+  <a href="https://codecov.io/github/alkonosst/AdvancedCLI">
+    <img src="https://img.shields.io/codecov/c/github/alkonosst/AdvancedCLI?style=for-the-badge&logo=codecov&logoColor=white&labelColor=F01F7A" alt="Coverage">
+  </a>
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge&color=blue" alt="License">
   </a>
@@ -32,9 +35,12 @@
 - [Description](#description)
 - [Key Features](#key-features)
 - [Quick Example](#quick-example)
+  - [Arduino](#arduino)
+  - [Native (Desktop)](#native-desktop)
 - [Installation](#installation)
   - [PlatformIO](#platformio)
   - [Arduino IDE](#arduino-ide)
+  - [CMake](#cmake)
 - [Usage](#usage)
   - [Including the library](#including-the-library)
   - [Namespace](#namespace)
@@ -62,26 +68,34 @@
 
 # Description
 
-**AdvancedCLI** is an Arduino library for defining commands, registering typed arguments, and dispatching parsed callbacks from any serial or stream input. Commands are registered once in `setup()` and then parsed on each incoming line in `loop()` - no manual token splitting required.
+**AdvancedCLI** is a command-line parsing library for embedded and native C++. It defines commands,
+registers typed arguments, and dispatches parsed callbacks from any text input: a serial line on a
+microcontroller, or `argv` / `stdin` in a desktop program. Commands are registered once at startup and
+then parsed on each input line - no manual token splitting required.
 
-The library is designed for all architectures, from AVR (_some new boards with more RAM like Nano
-Every_) to 32-bit (_ESP32, ESP8266, ARM Cortex-M, RP2040, etc._). All storage uses fixed-size,
+The library targets everything from AVR (_newer boards with more RAM, like the Nano Every_) to
+32-bit MCUs (_ESP32, ESP8266, ARM Cortex-M, RP2040, etc._), and also builds natively on desktop
+(Linux, macOS, Windows) for command-line tools and unit testing. All storage uses fixed-size,
 statically allocated buffers; there is no dynamic memory allocation.
 
 # Key Features
 
-- **Zero dynamic allocation** - Fixed-size buffers throughout; no use of `new`, `malloc`, or `String`.
+- **Zero dynamic allocation** - Fixed-size buffers throughout; no use of `new`, `malloc`, or `std::string`/`String`.
 - **Typed arguments** - Named, positional, flag, integer, and float arguments with automatic type checking.
 - **Custom output sink** - Attach any print function to route all CLI output (help, errors, etc.) to the desired destination.
 - **Sub-commands** - Two-level hierarchical command structures (e.g. `wifi scan`, `wifi connect -ssid ...`).
 - **Persistent arguments** - Parent-level args supplied before the sub-command name (e.g. `joy -n 2 cal`); readable from all sub-command callbacks.
 - **Aliases** - Short names for any argument (e.g. `-v` as an alias for `-verbose`).
 - **Validation callbacks** - Per-argument validators that accept or reject values before the command executes.
-- **Help system** - `printHelp()` lists all registered commands with their arguments and descriptions. An optional `depth` parameter controls the detail level: commands only (`1`), commands and sub-commands (`2`), or full output (`3`, default).
+- **Help system** - `printHelp()` lists all registered commands with their arguments and
+  descriptions. An optional `depth` parameter controls the detail level: commands only (`1`),
+  commands and sub-commands (`2`), or full output (`3`, default).
 - **Error routing** - Per-command `onError()` callbacks and per-argument `onInvalid()` callbacks.
 - **Case-insensitive by default** - Command and argument matching is case-insensitive unless changed with `setCaseSensitive(true)`.
 
 # Quick Example
+
+## Arduino
 
 ```cpp
 #include <Arduino.h>
@@ -131,6 +145,54 @@ Sending `hello -name Arduino` over serial prints:
 Hello, Arduino!
 ```
 
+## Native (Desktop)
+
+```cpp
+#include <AdvancedCLI.h>
+
+#include <cstddef>
+#include <cstdio>
+
+using namespace ACLI;
+
+static AdvancedCLI cli; // Global instance of the CLI parser
+static ArgStr name_arg; // Global handle for the "name" argument
+
+int main(int argc, char** argv) {
+  // Route all library output (help and error messages) to stdout.
+  cli.setOutput([](const char* msg) { std::puts(msg); });
+
+  // Register a "hello" command with a named "name" argument and an execution callback.
+  Command& hello = cli.addCommand("hello").setDescription("Greets the provided name.");
+  name_arg       = hello.addArg("name", "World").setDescription("Name to greet.");
+  hello.onExecute([](Command& cmd) {
+    std::printf("Hello, %s!\n", cmd.getArg(name_arg).getValue());
+  });
+
+  // Join argv[1..] into a single line (bounded by MAX_INPUT_LEN), then parse it once.
+  char line[Config::MAX_INPUT_LEN] = {};
+  size_t pos                       = 0;
+  for (int i = 1; i < argc; ++i) {
+    if (i > 1 && pos < sizeof(line) - 1) line[pos++] = ' ';
+    for (const char* p = argv[i]; *p && pos < sizeof(line) - 1; ++p) line[pos++] = *p;
+  }
+  line[pos] = '\0';
+
+  cli.parse(line);
+  return cli.lastParseOk() ? 0 : 1; // 0 on success, 1 on a parse/execution error
+}
+```
+
+Running the program with `hello -name World` prints:
+
+```
+Hello, World!
+```
+
+> [!TIP]
+> See the runnable [`examples/Native`](examples/Native), [`examples/NativeBatch`](examples/NativeBatch),
+> and [`examples/NativeValidation`](examples/NativeValidation) programs for complete native usage.
+
 # Installation
 
 ## PlatformIO
@@ -155,7 +217,29 @@ lib_deps =
 3. Search for **"AdvancedCLI"**.
 4. Click **Install**.
 
+## CMake
+
+For desktop C++ projects, pull the library with `FetchContent` and link the `alkonosst::AdvancedCLI`
+target:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+  AdvancedCLI
+  GIT_REPOSITORY https://github.com/alkonosst/AdvancedCLI.git
+  GIT_TAG        vx.y.z # pin a release tag (recommended), or a branch/commit
+)
+FetchContent_MakeAvailable(AdvancedCLI)
+
+target_link_libraries(your_app PRIVATE alkonosst::AdvancedCLI)
+```
+
 # Usage
+
+> [!NOTE]
+> The snippets below use Arduino's `Serial` as the output sink for brevity, but the API is identical
+> on native: pass any sink to `setOutput()` (e.g. `std::puts`) and call `parse()` wherever your input
+> arrives - in `loop()` on Arduino, or from `argv` / a read loop on desktop.
 
 ## Including the library
 
@@ -180,7 +264,8 @@ static ArgFlag verbose_flag;
 
 ## Registering Commands
 
-Call `addCommand()` during `setup()` and chain builder methods to configure the command. The resulting `Command&` reference is used to attach arguments and a callback:
+Call `addCommand()` at startup and chain builder methods to configure the command. The resulting
+`Command&` reference is used to attach arguments and a callback:
 
 ```cpp
 Command& cmd = cli.addCommand("ping");
@@ -198,7 +283,8 @@ cli.addCommand("ping")
 
 ## Argument Types
 
-Each `add*()` method returns a typed **handle** (`ArgStr`, `ArgInt`, etc.). Store it as a global variable and pass it to `cmd.getArg(handle)` inside the callback to retrieve the parsed value.
+Each `add*()` method returns a typed **handle** (`ArgStr`, `ArgInt`, etc.). Store it as a global
+variable and pass it to `cmd.getArg(handle)` inside the callback to retrieve the parsed value.
 
 | Type               | Registration method      | Input syntax  | Handle / Reader            |
 | ------------------ | ------------------------ | ------------- | -------------------------- |
@@ -312,7 +398,9 @@ Both quote styles support the same escape sequences inside:
 | `\t`     | tab     |
 
 > [!NOTE]
-> A quoted token that contains double quotes **cannot** use double quotes as the outer delimiter without escaping them. The equivalent of `'{"key":"value"}'` using double quotes is `"{\"key\":\"value\"}"`. Single quotes are simpler in that case.
+> A quoted token that contains double quotes **cannot** use double quotes as the outer delimiter
+> without escaping them. The equivalent of `'{"key":"value"}'` using double quotes is
+> `"{\"key\":\"value\"}"`. Single quotes are simpler in that case.
 
 ## Reading Parsed Values
 
@@ -337,7 +425,9 @@ if (field.isSet()) Serial.println(field.getValue());
 
 ### getParsedArgCount()
 
-`cmd.getParsedArgCount()` returns the number of arguments that were explicitly provided or carried a default value during the last parse. Call it inside the execution callback to branch on how many arguments were supplied without testing each one individually:
+`cmd.getParsedArgCount()` returns the number of arguments that were explicitly provided or carried a
+default value during the last parse. Call it inside the execution callback to branch on how many
+arguments were supplied without testing each one individually:
 
 ```cpp
 wifi_cmd.onExecute([](Command& cmd) {
@@ -413,7 +503,10 @@ joy.addSubCommand("cal").onExecute([](Command& cmd) {
 ```
 
 > [!IMPORTANT]
-> Persistent args must be registered on the parent command **before** any `addSubCommand()` call. Calling `addSubCommand()` seals the parent's argument list; any `addPersistent*Arg()` (or `addArg()`) attempted afterwards returns an invalid handle and sets `isValid()` to `false`. The correct order is:
+> Persistent args must be registered on the parent command **before** any `addSubCommand()` call.
+> Calling `addSubCommand()` seals the parent's argument list; any `addPersistent*Arg()` (or
+> `addArg()`) attempted afterwards returns an invalid handle and sets `isValid()` to `false`. The
+> correct order is:
 >
 > ```cpp
 > Command& joy = cli.addCommand("joy");
@@ -421,9 +514,13 @@ joy.addSubCommand("cal").onExecute([](Command& cmd) {
 > joy.addSubCommand("cal");                // 2. then register sub-commands
 > ```
 
-**Persistent arg types**: `addPersistentArg`, `addPersistentFlag`, `addPersistentIntArg`, `addPersistentFloatArg`; each with the same optional-default and builder-method support as their regular counterparts.
+**Persistent arg types**: `addPersistentArg`, `addPersistentFlag`, `addPersistentIntArg`,
+`addPersistentFloatArg`; each with the same optional-default and builder-method support as their
+regular counterparts.
 
-**Standalone parent**: calling the parent command directly (e.g. `joy -n 5` with no sub-command) works exactly as before - persistent args behave like ordinary named args when no sub-command is present.
+**Standalone parent**: calling the parent command directly (e.g. `joy -n 5` with no sub-command)
+works exactly as before - persistent args behave like ordinary named args when no sub-command is
+present.
 
 ## Aliases
 
@@ -528,7 +625,9 @@ Available commands:
 
 ## Error Handling
 
-**Command-level error handler (`onError`):** replaces the default CLI error output for a specific command. It is called for both parse errors (missing required argument, wrong type) and explicit `fail()` calls:
+**Command-level error handler (`onError`):** replaces the default CLI error output for a specific
+command. It is called for both parse errors (missing required argument, wrong type) and explicit
+`fail()` calls:
 
 ```cpp
 reboot_cmd.onError([](Command&, const char* err) {
@@ -559,7 +658,8 @@ cli.onUnknownCommand([](const char* name) {
 });
 ```
 
-**`parse()` return value:** `cli.parse()` returns `false` if any error occurred during parsing or execution. The same value is accessible afterwards via `cli.lastParseOk()`:
+**`parse()` return value:** `cli.parse()` returns `false` if any error occurred during parsing or
+execution. The same value is accessible afterwards via `cli.lastParseOk()`:
 
 ```cpp
 bool ok = cli.parse(buf);
@@ -569,9 +669,12 @@ if (!ok) Serial.println("Parse failed.");
 ## Validation And Invalid Callbacks
 
 > [!IMPORTANT]
-> Validation callbacks require `ACLI_ENABLE_VALIDATION_FN=1` in your build flags. This is enabled by default on 32-bit platforms (ESP32, ARM, RP2040). It is disabled by default on AVR to conserve RAM.
+> Validation callbacks require `ACLI_ENABLE_VALIDATION_FN=1` in your build flags. This is enabled by
+> default on 32-bit platforms (ESP32, ARM, RP2040). It is disabled by default on AVR to conserve
+> RAM.
 
-Call `setValidator()` on any typed argument to supply a predicate. The parser rejects the value and fires an error if the predicate returns `false`:
+Call `setValidator()` on any typed argument to supply a predicate. The parser rejects the value and
+fires an error if the predicate returns `false`:
 
 ```cpp
 static ArgInt servo_angle;
@@ -625,7 +728,7 @@ build_flags =
 
 ## Capacity Diagnostics
 
-Call these utility methods at the end of `setup()` to verify that all registrations fit within the configured limits:
+Call these utility methods after registering all commands to verify that all registrations fit within the configured limits:
 
 | Method                       | Returns                                                            |
 | ---------------------------- | ------------------------------------------------------------------ |
@@ -661,7 +764,13 @@ When no overflow occurs, `getAttemptedCommandCount()` equals `getCommandCount()`
 | Capacity          | Conservative (less RAM)                             | Generous                                    |
 
 > [!NOTE]
-> On AVR, lambdas **with captures** (e.g. `[&]`, `[=]`) cannot be used as callbacks because `std::function` is unavailable. Use plain non-capturing lambdas, which decay to function pointers, or named free functions.
+> Native desktop builds (Linux, macOS, Windows) follow the same configuration as the 32-bit column:
+> `std::function` callbacks, capturing lambdas, and validation are all available.
+
+> [!NOTE]
+> On AVR, lambdas **with captures** (e.g. `[&]`, `[=]`) cannot be used as callbacks because
+> `std::function` is unavailable. Use plain non-capturing lambdas, which decay to function pointers,
+> or named free functions.
 
 > [!WARNING]
 > On AVR, `ACLI_ENABLE_VALIDATION_FN` and `ACLI_ENABLE_INVALID_FN` default to `0`. Enabling them on
@@ -670,7 +779,10 @@ When no overflow occurs, `getAttemptedCommandCount()` equals `getCommandCount()`
 
 # Release Status
 
-This project is in active development. Until reaching version **v1.0.0**, consider it **beta software**. APIs may change in future releases, and some features may be incomplete or unstable. Please report any issues on the [GitHub Issues](https://github.com/alkonosst/AdvancedCLI/issues) page.
+This project is in active development. Until reaching version **v1.0.0**, consider it **beta
+software**. APIs may change in future releases, and some features may be incomplete or unstable.
+Please report any issues on the [GitHub Issues](https://github.com/alkonosst/AdvancedCLI/issues)
+page.
 
 # License
 
